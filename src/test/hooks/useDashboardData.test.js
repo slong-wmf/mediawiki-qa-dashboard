@@ -38,6 +38,7 @@ describe('useDashboardData', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers(); // prevent fake timers leaking between tests
   });
 
   describe('initial state', () => {
@@ -175,7 +176,9 @@ describe('useDashboardData', () => {
       const { result } = renderHook(() => useDashboardData());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
-      result.current.refresh();
+      // Wrap in act() so React flushes the synchronous setLoading(true) state
+      // update before the assertion runs.
+      act(() => { result.current.refresh(); });
       expect(result.current.loading).toBe(true);
     });
 
@@ -205,20 +208,27 @@ describe('useDashboardData', () => {
 
   describe('auto-refresh interval', () => {
     it('calls fetch services again after the interval elapses', async () => {
+      // Fake timers MUST be installed before renderHook so that the setInterval
+      // created inside the hook's useEffect is tracked by the fake clock.
+      // Installing them after the hook mounts means the interval uses real timers
+      // and vi.advanceTimersByTime() would never fire it.
       vi.useFakeTimers();
-      fetchRecentBuilds.mockResolvedValue(MOCK_BUILDS);
-      fetchCoverageData.mockResolvedValue(MOCK_COVERAGE);
-      fetchRecentBugs.mockResolvedValue(MOCK_BUGS);
-
       const { result } = renderHook(() => useDashboardData());
-      await waitFor(() => expect(result.current.loading).toBe(false));
 
+      // The mocks resolve immediately (Promise.resolve), so the entire initial
+      // fetch chain completes as microtasks — no macrotimers needed.
+      // await act(async () => {}) flushes all pending microtasks and React work.
+      await act(async () => {});
+
+      expect(result.current.loading).toBe(false);
       const callsBefore = fetchRecentBuilds.mock.calls.length;
-      vi.advanceTimersByTime(3_600_000); // advance by 1 hour (default interval)
-      await waitFor(() => {
-        expect(fetchRecentBuilds.mock.calls.length).toBeGreaterThan(callsBefore);
+
+      // Fire the setInterval callback and flush resulting async state updates.
+      await act(async () => {
+        vi.advanceTimersByTime(3_600_000); // advance by 1 hour (default interval)
       });
 
+      expect(fetchRecentBuilds.mock.calls.length).toBeGreaterThan(callsBefore);
       vi.useRealTimers();
     });
   });

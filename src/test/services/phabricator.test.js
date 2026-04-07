@@ -119,7 +119,9 @@ const BASE_RAW_TASK = {
   },
 };
 
-const CUT_OFF_EPOCH = 1_700_000_000; // older than both dates → nothing is "new"
+// Must be NEWER (larger epoch) than dateCreated (1_743_000_000) so that
+// createdEp >= cutoffEpoch is false and isNew === false.
+const CUT_OFF_EPOCH = 1_750_000_000;
 
 describe('shapeTask', () => {
   describe('positive cases', () => {

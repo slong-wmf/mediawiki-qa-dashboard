@@ -135,8 +135,10 @@ describe('BugsPanel', () => {
         makeTask({ id: 2, statusGroup: 'stalled', isSuspectedBug: false }),
       ]);
       render(<BugsPanel bugs={bugs} loading={false} error={null} />);
-      expect(screen.getByText('Open')).toBeInTheDocument();
-      expect(screen.getByText('Stalled')).toBeInTheDocument();
+      // Target the filter card buttons by their title attribute to avoid
+      // ambiguity with identically-labelled status badges in the task table.
+      expect(screen.getByTitle('Filter to Open tasks')).toBeInTheDocument();
+      expect(screen.getByTitle('Filter to Stalled tasks')).toBeInTheDocument();
     });
 
     it('filters the table when a status card is clicked', () => {
@@ -147,8 +149,10 @@ describe('BugsPanel', () => {
       render(<BugsPanel bugs={bugs} loading={false} error={null} />);
       // Switch to all tasks so both are visible
       fireEvent.click(screen.getByText(/All tasks \(2\)/));
-      // Click the In Progress card
-      fireEvent.click(screen.getByText('In Progress'));
+      // Click the In Progress filter card via its unique title attribute —
+      // using getByText('In Progress') would be ambiguous because the status
+      // badge in the task row also renders that same text.
+      fireEvent.click(screen.getByTitle('Filter to In Progress tasks'));
       // Only T2 should appear; T1 should be hidden
       expect(screen.getByText('T2')).toBeInTheDocument();
       expect(screen.queryByText('T1')).toBeNull();

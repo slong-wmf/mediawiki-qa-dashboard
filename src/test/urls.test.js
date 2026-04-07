@@ -65,6 +65,7 @@ function extractUrls(content) {
     .map((url) => url.replace(/[.,;:)\]`]+$/, ''))
     .filter((url) => !url.includes('${'))   // skip template literals
     .filter((url) => !url.includes('YOUR_')) // skip placeholder strings
+    .filter((url) => !url.includes(']('))   // skip markdown link false-matches ([url](url))
     .filter((url) => url.length >= 12);     // must be a plausible URL
 }
 

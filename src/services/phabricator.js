@@ -90,7 +90,7 @@ const BUG_KEYWORDS = [
   'crash', 'error', 'exception',
   'not working', 'doesn\'t work', 'does not work',
   'unexpected', 'incorrect', 'wrong',
-  'fix ', ' fix:', 'hotfix',
+  'hotfix',
 ];
 
 /**
@@ -100,6 +100,10 @@ const BUG_KEYWORDS = [
  */
 export function isSuspectedBug(title) {
   const lower = title.toLowerCase();
+  // Use a word-boundary regex for "fix" so that words like "prefix" and "suffix"
+  // are not false-positively flagged — e.g. "prefix setting" would otherwise match
+  // the plain substring "fix " (the trailing space lands on the word boundary).
+  if (/\bfix\b/.test(lower)) return true;
   return BUG_KEYWORDS.some((kw) => lower.includes(kw));
 }
 

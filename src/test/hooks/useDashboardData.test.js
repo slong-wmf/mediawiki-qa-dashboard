@@ -164,7 +164,9 @@ describe('useDashboardData', () => {
       await waitFor(() => expect(result.current.loading).toBe(false));
       expect(result.current.errors.jenkins).toBe(err);
 
-      result.current.refresh();
+      // Wrap in act() so React flushes setLoading(true) and the subsequent
+      // async fetchAll() state updates atomically, avoiding a race condition.
+      act(() => { result.current.refresh(); });
       await waitFor(() => expect(result.current.loading).toBe(false));
       expect(result.current.errors.jenkins).toBeNull();
       expect(result.current.builds).toEqual(MOCK_BUILDS);

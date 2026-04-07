@@ -256,7 +256,7 @@ export default function PassFailPanel({ builds, error, loading }) {
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
                       className="hover:text-blue-400 hover:underline transition-colors truncate block"
-                      title={`Open job in Jenkins: ${build.job_url}`}
+                      title={build.job}
                     >
                       {build.job}
                     </a>

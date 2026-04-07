@@ -21,11 +21,11 @@ function Skeleton() {
 
 /**
  * Return a hex colour for a bar based on average duration.
- * green < 120s | amber < 300s | red ≥ 300s
+ * green < 300s (5 min) | amber 300–600s (5–10 min) | red ≥ 600s (10 min+)
  */
 function barColour(avgSeconds) {
-  if (avgSeconds < 120) return '#22c55e';
-  if (avgSeconds < 300) return '#f59e0b';
+  if (avgSeconds < 300) return '#22c55e';
+  if (avgSeconds < 600) return '#f59e0b';
   return '#ef4444';
 }
 
@@ -116,7 +116,7 @@ export default function ExecutionTimePanel({ builds, error, loading }) {
     .sort((a, b) => b.avgDuration - a.avgDuration)
     .slice(0, 15);
 
-  const hasSlowJobs = chartData.some((d) => d.avgDuration >= 300);
+  const hasSlowJobs = chartData.some((d) => d.avgDuration >= 300); // amber or red
 
   const handleBarClick = (data) => {
     if (data?.activePayload?.[0]?.payload?.job_url) {
@@ -161,8 +161,8 @@ export default function ExecutionTimePanel({ builds, error, loading }) {
 
       {hasSlowJobs && (
         <p className="text-xs text-gray-400">
-          <span className="text-red-400 font-medium">Red</span> bars exceed 5 min ·{' '}
-          <span className="text-amber-400 font-medium">Amber</span> exceed 2 min
+          <span className="text-red-400 font-medium">Red</span> bars exceed 10 min ·{' '}
+          <span className="text-amber-400 font-medium">Amber</span> exceed 5 min
         </p>
       )}
       <p className="text-xs text-gray-600 italic">

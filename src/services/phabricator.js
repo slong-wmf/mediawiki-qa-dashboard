@@ -141,7 +141,14 @@ async function conduit(method, params) {
 
 // ── Shape a raw Conduit task into our internal model ────────────────────────
 
-export function shapeTask(raw, cutoffEpoch) {
+/**
+ * Shape a raw Conduit task record into the dashboard's internal model.
+ *
+ * @param {object} raw           - Raw task object from maniphest.search
+ * @param {number} cutoffEpoch   - Unix epoch; tasks created after this are "new"
+ * @param {Object} phidToName    - Map of project PHID → display name (from project.search)
+ */
+export function shapeTask(raw, cutoffEpoch, phidToName = {}) {
   const fields      = raw.fields ?? {};
   const statusRaw   = fields.status?.value ?? 'open';
   const priorityVal = fields.priority?.value ?? 50;
@@ -149,6 +156,13 @@ export function shapeTask(raw, cutoffEpoch) {
   const modifiedEp  = fields.dateModified  ?? 0;
   const prio        = mapPriority(priorityVal);
   const title       = fields.name ?? '(no title)';
+
+  // Resolve project PHIDs to human-readable names (requires attachments[projects]=1
+  // in the maniphest.search request and a prior project.search call to build phidToName).
+  const projectPHIDs = raw.attachments?.projects?.projectPHIDs ?? [];
+  const projectNames = projectPHIDs
+    .map((phid) => phidToName[phid])
+    .filter(Boolean);
 
   return {
     id:           raw.id,
@@ -166,6 +180,8 @@ export function shapeTask(raw, cutoffEpoch) {
     // Created within the look-back window = freshly filed
     isNew:        createdEp >= cutoffEpoch,
     isSuspectedBug: isSuspectedBug(title),
+    projectNames,        // display names of all Phabricator project tags on this task
+    projectCount: projectPHIDs.length, // total tag count (non-zero even when names failed to resolve)
   };
 }
 
@@ -182,17 +198,44 @@ export function shapeTask(raw, cutoffEpoch) {
  *   cutoffDate: string,
  * }>}
  */
+/**
+ * Resolve an array of project PHIDs to a { phid → name } map via project.search.
+ * Silently returns an empty map on failure so the rest of the fetch can proceed.
+ *
+ * @param {string[]} phids
+ * @returns {Promise<Object>}
+ */
+async function resolveProjectNames(phids) {
+  if (!phids.length) return {};
+  const params = new URLSearchParams({ limit: String(phids.length) });
+  phids.forEach((phid) => params.append('constraints[phids][]', phid));
+  try {
+    const result = await conduit('project.search', params);
+    return Object.fromEntries(
+      (result.data ?? []).map((p) => [p.phid, p.fields?.name ?? p.phid]),
+    );
+  } catch (err) {
+    // Project name resolution is best-effort; tasks will fall back to showing
+    // a raw tag count instead of names.  Log so developers can diagnose.
+    console.warn('[phabricator] project.search failed — tag names unavailable:', err?.message ?? err);
+    return {};
+  }
+}
+
 export async function fetchRecentBugs() {
   const cutoffEpoch = Math.floor(Date.now() / 1000) - LOOKBACK_DAYS * 86400;
-  const allTasks    = [];
+  const rawTasks    = []; // collect raw Conduit records before shaping
   let   after       = null;
   let   hasMore     = false;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const params = new URLSearchParams({
       'constraints[modifiedStart]': String(cutoffEpoch),
-      'order':  'updated',
-      'limit':  String(PAGE_LIMIT),
+      'order':                      'updated',
+      'limit':                      String(PAGE_LIMIT),
+      // Request the projects attachment so we can show Phabricator tags per task.
+      // Resolving the PHIDs to names is done in a single batch call after pagination.
+      'attachments[projects]':      '1',
     });
 
     // Include all broad status categories — we filter closed ones client-side
@@ -203,13 +246,7 @@ export async function fetchRecentBugs() {
 
     const result = await conduit('maniphest.search', params);
     const raw    = Array.isArray(result.data) ? result.data : [];
-
-    for (const t of raw) {
-      const task = shapeTask(t, cutoffEpoch);
-      // Skip definitively closed tasks
-      if (CLOSED_STATUSES.has(task.statusRaw)) continue;
-      allTasks.push(task);
-    }
+    rawTasks.push(...raw);
 
     const cursor = result.cursor ?? {};
     after    = cursor.after ?? null;
@@ -219,6 +256,17 @@ export async function fetchRecentBugs() {
     if (raw.length < PAGE_LIMIT) { hasMore = false; break; }
     if (!after) break;
   }
+
+  // Resolve all unique project PHIDs to names in a single batch request.
+  const allPHIDs = [...new Set(
+    rawTasks.flatMap((t) => t.attachments?.projects?.projectPHIDs ?? []),
+  )];
+  const phidToName = await resolveProjectNames(allPHIDs);
+
+  // Shape all tasks now that we have the full PHID→name map, then filter closed ones.
+  const allTasks = rawTasks
+    .map((t) => shapeTask(t, cutoffEpoch, phidToName))
+    .filter((task) => !CLOSED_STATUSES.has(task.statusRaw));
 
   return {
     tasks:        allTasks,

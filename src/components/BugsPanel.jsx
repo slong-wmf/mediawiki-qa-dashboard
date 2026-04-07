@@ -52,6 +52,46 @@ function PriorityDot({ priority }) {
   );
 }
 
+/**
+ * Renders up to MAX_VISIBLE project tag names as small grey badges.
+ * Any overflow is summarised as "+N more" with a tooltip listing all names.
+ * When names failed to resolve but a raw count is available, falls back to
+ * showing "N tags" so the column is never misleadingly blank.
+ */
+const MAX_VISIBLE_TAGS = 3;
+function TagList({ names, count = 0 }) {
+  if (!names.length) {
+    // Name resolution failed (or no tags at all)
+    if (count > 0) {
+      return <span className="text-gray-500 italic">{count} tag{count !== 1 ? 's' : ''}</span>;
+    }
+    return <span className="text-gray-600">—</span>;
+  }
+  const visible  = names.slice(0, MAX_VISIBLE_TAGS);
+  const overflow = names.length - MAX_VISIBLE_TAGS;
+  return (
+    <span className="flex flex-wrap gap-0.5">
+      {visible.map((name) => (
+        <span
+          key={name}
+          title={name}
+          className="inline-block max-w-[80px] truncate rounded bg-gray-700 px-1 py-0.5 text-gray-300"
+        >
+          {name}
+        </span>
+      ))}
+      {overflow > 0 && (
+        <span
+          className="rounded bg-gray-700 px-1 py-0.5 text-gray-500"
+          title={names.slice(MAX_VISIBLE_TAGS).join(', ')}
+        >
+          +{overflow}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function RelativeTime({ iso }) {
   if (!iso) return <span className="text-gray-600">—</span>;
   const diff = Date.now() - new Date(iso).getTime();
@@ -194,26 +234,41 @@ export default function BugsPanel({ bugs, error, loading }) {
         )}
       </div>
 
-      {/* ── Limitation note ── */}
-      <p className="text-xs text-gray-600 leading-snug border-l-2 border-gray-700 pl-2">
-        <span className="text-gray-500">⚠ Bugs noted in comments</span> on existing tasks cannot
-        be detected via the Phabricator API without fetching every transaction.
-        "Suspected bugs" are flagged by title keywords only — check individual tasks
-        for in-thread bug reports.
-      </p>
+      {/* ── Criteria + limitation notes ── */}
+      <div className="space-y-1">
+        <p className="text-xs text-gray-600 leading-snug border-l-2 border-gray-700 pl-2">
+          <span className="text-gray-500">Active</span> = modified within the past 7 days
+          and not in a resolved, declined, invalid, wontfix, spite, or duplicate state.
+        </p>
+        <p className="text-xs text-gray-600 leading-snug border-l-2 border-gray-700 pl-2">
+          <span className="text-gray-500">Suspected bug</span> = task title contains a bug-signal
+          keyword such as <em>bug</em>, <em>regression</em>, <em>broken</em>, <em>crash</em>,
+          <em> error</em>, <em>fix</em>, <em>fail</em>, <em>not working</em>, etc.
+          Tasks whose titles describe access requests, RfCs, feature requests, investigations,
+          or stewardship changes are <strong className="text-gray-400">not</strong> flagged
+          unless their title also contains one of those keywords.
+        </p>
+        <p className="text-xs text-gray-600 leading-snug border-l-2 border-gray-700 pl-2">
+          <span className="text-gray-500">⚠ Bugs noted in comments</span> on existing tasks cannot
+          be detected via the Phabricator API without fetching every transaction.
+          "Suspected bugs" are flagged by title keywords only — check individual tasks
+          for in-thread bug reports.
+        </p>
+      </div>
 
       {/* ── Task table ── */}
       {sorted.length === 0 ? (
         <p className="text-gray-500 text-sm italic">No tasks match the current filter.</p>
       ) : (
-        <div className="overflow-y-auto max-h-72">
+        <div className="overflow-x-auto overflow-y-auto max-h-72">
           <table className="w-full text-xs text-left">
             <thead className="sticky top-0 bg-gray-800">
               <tr className="border-b border-gray-700 text-gray-400">
                 <th className="pb-1 pr-2 font-medium w-12">T#</th>
                 <th className="pb-1 pr-2 font-medium">Title</th>
-                <th className="pb-1 pr-2 font-medium w-28">Status</th>
-                <th className="pb-1 pr-2 font-medium w-28">Priority</th>
+                <th className="pb-1 pr-2 font-medium w-24">Status</th>
+                <th className="pb-1 pr-2 font-medium w-24">Priority</th>
+                <th className="pb-1 pr-2 font-medium">Tags</th>
                 <th className="pb-1 font-medium w-16">Updated</th>
               </tr>
             </thead>
@@ -236,7 +291,7 @@ export default function BugsPanel({ bugs, error, loading }) {
                       T{task.id}
                     </a>
                   </td>
-                  <td className="py-1.5 pr-2 text-gray-200 max-w-xs">
+                  <td className="py-1.5 pr-2 text-gray-200 max-w-[160px]">
                     <span className="block truncate" title={task.title}>
                       {task.isSuspectedBug && !showAll && (
                         <span className="text-amber-400 mr-1" title="Suspected bug (keyword match)">🐛</span>
@@ -252,6 +307,9 @@ export default function BugsPanel({ bugs, error, loading }) {
                   </td>
                   <td className="py-1.5 pr-2">
                     <PriorityDot priority={task.priority} />
+                  </td>
+                  <td className="py-1.5 pr-2 max-w-[180px]">
+                    <TagList names={task.projectNames ?? []} count={task.projectCount ?? 0} />
                   </td>
                   <td className="py-1.5 text-right">
                     <RelativeTime iso={task.modifiedAt} />

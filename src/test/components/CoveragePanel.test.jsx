@@ -2,6 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import CoveragePanel from '../../components/CoveragePanel.jsx';
 
+// fetchMaintainers is now called automatically on mount; mock it so tests
+// don't attempt a real network request.
+vi.mock('../../services/maintainers.js', () => ({
+  fetchMaintainers: vi.fn(() => Promise.resolve(new Map())),
+  uniqueStewards:   vi.fn(() => []),
+}));
+
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }) => <div>{children}</div>,
   BarChart: ({ children }) => <div data-testid="bar-chart">{children}</div>,
@@ -85,8 +92,10 @@ describe('CoveragePanel', () => {
       expect(screen.getByText('75%')).toBeInTheDocument();
     });
 
-    it('renders the bar chart', () => {
+    it('renders the bar chart after switching to Top 15 view', () => {
       render(<CoveragePanel coverage={COVERAGE} loading={false} error={null} />);
+      // Default view is Table; switch to chart view first.
+      fireEvent.click(screen.getByText('Top 15'));
       expect(screen.getByTestId('bar-chart')).toBeInTheDocument();
     });
 
@@ -112,8 +121,8 @@ describe('CoveragePanel', () => {
     it('switches to All extensions view when button is clicked', () => {
       render(<CoveragePanel coverage={COVERAGE} loading={false} error={null} />);
       fireEvent.click(screen.getByText(`All (${COVERAGE.extensions.length})`));
-      // After switching, total count includes all 3 extensions
-      expect(screen.getByText(/3 extensions/i)).toBeInTheDocument();
+      // After switching, footer summary shows all 3 extensions (avg across all 3)
+      expect(screen.getByText(/3 extensions · avg/i)).toBeInTheDocument();
     });
 
     it('shows "mediawiki-core entry not found" when core is null', () => {

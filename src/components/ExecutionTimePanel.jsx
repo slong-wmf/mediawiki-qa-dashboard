@@ -1,3 +1,4 @@
+import { useMemo, useCallback } from 'react';
 import {
   BarChart,
   Bar,
@@ -8,20 +9,13 @@ import {
   Cell,
   ResponsiveContainer,
 } from 'recharts';
-
-/** Skeleton loader for the panel. */
-function Skeleton() {
-  return (
-    <div className="animate-pulse space-y-3">
-      <div className="h-48 bg-gray-700 rounded"></div>
-      <div className="h-3 bg-gray-700 rounded w-3/4"></div>
-    </div>
-  );
-}
+import { formatDuration, truncate } from '../utils/format.js';
+import { PanelSkeleton } from './shared/Skeleton.jsx';
+import { ErrorBanner } from './shared/ErrorBanner.jsx';
 
 /**
  * Return a hex colour for a bar based on average duration.
- * green < 300s (5 min) | amber 300–600s (5–10 min) | red ≥ 600s (10 min+)
+ * green < 5 min · amber 5–10 min · red ≥ 10 min
  */
 function barColour(avgSeconds) {
   if (avgSeconds < 300) return '#22c55e';
@@ -29,22 +23,9 @@ function barColour(avgSeconds) {
   return '#ef4444';
 }
 
-/** Format seconds into "Xm Ys" or "Xs". */
-function fmtSeconds(s) {
-  if (!s) return '0s';
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return m > 0 ? `${m}m ${sec}s` : `${s}s`;
-}
-
-/** Truncate a job name to at most 20 characters. */
-function truncate(name, max = 20) {
-  return name.length > max ? `${name.slice(0, max)}…` : name;
-}
-
 /**
- * Custom tooltip that shows the full job name, avg duration, sample count,
- * and a hint to click through to Jenkins.
+ * Custom tooltip showing the full job name, avg / min / max duration,
+ * sample count, and a click-through hint.
  */
 function CustomTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
@@ -52,9 +33,9 @@ function CustomTooltip({ active, payload }) {
   return (
     <div className="bg-gray-800 border border-gray-600 rounded p-2 text-xs shadow-lg max-w-[200px]">
       <p className="text-white font-medium mb-0.5 break-words">{d.fullJob}</p>
-      <p className="text-gray-300">Avg: {fmtSeconds(d.avgDuration)}</p>
+      <p className="text-gray-300">Avg: {formatDuration(d.avgDuration)}</p>
       <p className="text-gray-400">
-        Min: {fmtSeconds(d.minDuration)} · Max: {fmtSeconds(d.maxDuration)}
+        Min: {formatDuration(d.minDuration)} · Max: {formatDuration(d.maxDuration)}
       </p>
       <p className="text-gray-400">{d.sampleCount} build{d.sampleCount !== 1 ? 's' : ''}</p>
       <p className="text-gray-500 text-xs mt-1 italic">Includes setup, install &amp; all test phases</p>
@@ -64,65 +45,57 @@ function CustomTooltip({ active, payload }) {
 }
 
 /**
- * Job Total Time panel.
- * Groups builds by job name and shows average total job duration per job as a bar chart.
+ * Job Total Time panel. Groups builds by job name and plots the average
+ * total job duration (top 15) as a bar chart.
  *
- * Note: Wikimedia's Quibble jobs do not publish JUnit test-phase timings to Jenkins,
- * so durations shown are total job runtime (setup + install + PHPUnit + WDIO + teardown).
- *
- * Interactions:
- * - Hover a bar to see avg/min/max duration and sample count.
- * - Click a bar to open that Jenkins job page in a new tab.
+ * Quibble jobs do not publish JUnit per-phase timings, so durations shown
+ * are total job runtime (setup + install + PHPUnit + WDIO + teardown).
  *
  * @param {{ builds: Array, error: Error|null, loading: boolean }} props
  */
 export default function ExecutionTimePanel({ builds, error, loading }) {
-  if (loading) return <Skeleton />;
+  const chartData = useMemo(() => {
+    const grouped = {};
+    for (const build of builds) {
+      if (!grouped[build.job]) {
+        grouped[build.job] = { durations: [], job_url: build.job_url };
+      }
+      grouped[build.job].durations.push(build.duration_seconds);
+    }
+    return Object.entries(grouped)
+      .map(([job, { durations, job_url }]) => {
+        const avg = Math.round(durations.reduce((s, d) => s + d, 0) / durations.length);
+        return {
+          job: truncate(job),
+          fullJob: job,
+          job_url,
+          avgDuration: avg,
+          minDuration: Math.min(...durations),
+          maxDuration: Math.max(...durations),
+          sampleCount: durations.length,
+        };
+      })
+      .sort((a, b) => b.avgDuration - a.avgDuration)
+      .slice(0, 15);
+  }, [builds]);
 
-  if (error) {
-    return (
-      <div className="bg-red-900 border border-red-600 text-red-200 rounded p-3 text-sm">
-        Jenkins data unavailable: {error.message}
-      </div>
-    );
-  }
+  const hasSlowJobs = useMemo(
+    () => chartData.some((d) => d.avgDuration >= 300),
+    [chartData],
+  );
+
+  const handleBarClick = useCallback((barData) => {
+    if (barData?.job_url) {
+      window.open(barData.job_url, '_blank', 'noopener,noreferrer');
+    }
+  }, []);
+
+  if (loading) return <PanelSkeleton />;
+  if (error)   return <ErrorBanner source="Jenkins" error={error} />;
 
   if (builds.length === 0) {
     return <p className="text-gray-500 text-sm italic">No build data available.</p>;
   }
-
-  // Group builds by job and gather stats + job_url
-  const grouped = {};
-  for (const build of builds) {
-    if (!grouped[build.job]) {
-      grouped[build.job] = { durations: [], job_url: build.job_url };
-    }
-    grouped[build.job].durations.push(build.duration_seconds);
-  }
-
-  const chartData = Object.entries(grouped)
-    .map(([job, { durations, job_url }]) => {
-      const avg = Math.round(durations.reduce((s, d) => s + d, 0) / durations.length);
-      return {
-        job: truncate(job),
-        fullJob: job,
-        job_url,
-        avgDuration: avg,
-        minDuration: Math.min(...durations),
-        maxDuration: Math.max(...durations),
-        sampleCount: durations.length,
-      };
-    })
-    .sort((a, b) => b.avgDuration - a.avgDuration)
-    .slice(0, 15);
-
-  const hasSlowJobs = chartData.some((d) => d.avgDuration >= 300); // amber or red
-
-  const handleBarClick = (barData) => {
-    if (barData?.job_url) {
-      window.open(barData.job_url, '_blank', 'noopener');
-    }
-  };
 
   return (
     <div className="space-y-3">
@@ -155,8 +128,8 @@ export default function ExecutionTimePanel({ builds, error, loading }) {
             onClick={handleBarClick}
             style={{ cursor: 'pointer' }}
           >
-            {chartData.map((entry, i) => (
-              <Cell key={i} fill={barColour(entry.avgDuration)} />
+            {chartData.map((entry) => (
+              <Cell key={entry.fullJob} fill={barColour(entry.avgDuration)} />
             ))}
           </Bar>
         </BarChart>

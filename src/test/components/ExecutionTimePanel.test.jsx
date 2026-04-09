@@ -60,9 +60,9 @@ describe('ExecutionTimePanel', () => {
 
   describe('error state', () => {
     it('renders the error message', () => {
-      const err = new Error('Jenkins unavailable');
+      const err = new Error('Jenkins is down');
       render(<ExecutionTimePanel builds={[]} loading={false} error={err} />);
-      expect(screen.getByText(/Jenkins unavailable/)).toBeInTheDocument();
+      expect(screen.getByText(/Jenkins is down/)).toBeInTheDocument();
     });
   });
 

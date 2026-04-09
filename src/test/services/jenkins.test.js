@@ -188,14 +188,15 @@ describe('fetchRecentBuilds', () => {
   });
 
   describe('positive cases', () => {
-    it('returns an array of build objects', async () => {
-      const builds = await fetchRecentBuilds();
-      expect(Array.isArray(builds)).toBe(true);
-      expect(builds.length).toBeGreaterThan(0);
+    it('returns a { builds, failedJobs } object', async () => {
+      const result = await fetchRecentBuilds();
+      expect(Array.isArray(result.builds)).toBe(true);
+      expect(Array.isArray(result.failedJobs)).toBe(true);
+      expect(result.builds.length).toBeGreaterThan(0);
     });
 
     it('each build has the expected shape', async () => {
-      const builds = await fetchRecentBuilds();
+      const { builds } = await fetchRecentBuilds();
       const build = builds[0];
       expect(build).toMatchObject({
         job: expect.any(String),
@@ -208,18 +209,18 @@ describe('fetchRecentBuilds', () => {
     });
 
     it('normalises SUCCESS result to passed', async () => {
-      const builds = await fetchRecentBuilds();
+      const { builds } = await fetchRecentBuilds();
       expect(builds.every((b) => b.status === 'passed')).toBe(true);
     });
 
     it('normalises FAILURE result to failed', async () => {
       global.fetch.mockResolvedValue(mockJobResponse([FAILED_BUILD]));
-      const builds = await fetchRecentBuilds();
+      const { builds } = await fetchRecentBuilds();
       expect(builds.every((b) => b.status === 'failed')).toBe(true);
     });
 
     it('converts duration from milliseconds to seconds', async () => {
-      const builds = await fetchRecentBuilds();
+      const { builds } = await fetchRecentBuilds();
       // 120_000 ms → 120 s
       expect(builds[0].duration_seconds).toBe(120);
     });
@@ -228,7 +229,7 @@ describe('fetchRecentBuilds', () => {
       global.fetch.mockResolvedValue(
         mockJobResponse([SUCCESSFUL_BUILD, FAILED_BUILD]),
       );
-      const builds = await fetchRecentBuilds();
+      const { builds } = await fetchRecentBuilds();
       for (let i = 1; i < builds.length; i++) {
         expect(new Date(builds[i - 1].timestamp) >= new Date(builds[i].timestamp)).toBe(true);
       }
@@ -242,15 +243,45 @@ describe('fetchRecentBuilds', () => {
         if (callCount % 3 === 0) return Promise.reject(new Error('flaky'));
         return Promise.resolve(mockJobResponse([SUCCESSFUL_BUILD]));
       });
-      const builds = await fetchRecentBuilds();
+      const { builds, failedJobs } = await fetchRecentBuilds();
       expect(builds.length).toBeGreaterThan(0);
+      // At least one job failed — metadata should surface that for the banner
+      expect(failedJobs.length).toBeGreaterThan(0);
+    });
+
+    it('populates failedJobs entries with { label, error }', async () => {
+      // First call fails with the exact message fetchJobBuilds would throw;
+      // all subsequent calls succeed so we still get a partial result.
+      let callCount = 0;
+      global.fetch.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            ok: false,
+            status: 503,
+            statusText: 'Service Unavailable',
+          });
+        }
+        return Promise.resolve(mockJobResponse([SUCCESSFUL_BUILD]));
+      });
+      const { failedJobs } = await fetchRecentBuilds();
+      expect(failedJobs.length).toBe(1);
+      expect(failedJobs[0]).toMatchObject({
+        label: expect.any(String),
+        error: expect.stringContaining('503'),
+      });
+    });
+
+    it('returns an empty failedJobs array when all jobs succeed', async () => {
+      const { failedJobs } = await fetchRecentBuilds();
+      expect(failedJobs).toEqual([]);
     });
 
     it('filters out in-progress builds (result === null)', async () => {
       global.fetch.mockResolvedValue(
         mockJobResponse([IN_PROGRESS_BUILD, SUCCESSFUL_BUILD]),
       );
-      const builds = await fetchRecentBuilds();
+      const { builds } = await fetchRecentBuilds();
       // In-progress builds have result null and are filtered before mapping,
       // so none should survive into the output
       expect(builds.every((b) => b.status !== undefined)).toBe(true);

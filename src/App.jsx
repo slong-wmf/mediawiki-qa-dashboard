@@ -1,59 +1,10 @@
 import { useDashboardData } from './hooks/useDashboardData.js';
+import { Panel } from './components/shared/Panel.jsx';
 import PassFailPanel from './components/PassFailPanel.jsx';
 import CoveragePanel from './components/CoveragePanel.jsx';
 import ExecutionTimePanel from './components/ExecutionTimePanel.jsx';
 import BugsPanel from './components/BugsPanel.jsx';
 import TrainBlockersPanel from './components/TrainBlockersPanel.jsx';
-
-/**
- * Skeleton placeholder shown while data is loading.
- */
-function PanelSkeleton() {
-  return (
-    <div className="animate-pulse space-y-3 p-4">
-      <div className="h-4 bg-gray-700 rounded w-1/3"></div>
-      <div className="h-48 bg-gray-700 rounded"></div>
-      <div className="h-3 bg-gray-700 rounded w-2/3"></div>
-      <div className="h-3 bg-gray-700 rounded w-1/2"></div>
-    </div>
-  );
-}
-
-/**
- * Error banner shown when a data source has failed.
- */
-function ErrorBanner({ source, error }) {
-  if (!error) return null;
-  return (
-    <div className="bg-red-900 border border-red-600 text-red-200 rounded p-3 text-sm mb-4">
-      <span className="font-semibold">{source} unavailable:</span>{' '}
-      {error.message ?? 'Unknown error'}
-    </div>
-  );
-}
-
-/**
- * Generic panel wrapper with title, skeleton, and error state handling.
- *
- * @param {ReactNode} [action] - Optional element rendered in the panel header
- *   to the right of the title (e.g. a contextual action button).
- */
-function Panel({ title, loading, error, source, action, children }) {
-  return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
-          {title}
-        </h2>
-        {action && <div className="flex items-center gap-2">{action}</div>}
-      </div>
-      <div className="p-4">
-        {error && <ErrorBanner source={source} error={error} />}
-        {loading ? <PanelSkeleton /> : children}
-      </div>
-    </div>
-  );
-}
 
 /**
  * Format a Date into HH:MM:SS local time.
@@ -69,11 +20,14 @@ function formatTime(date) {
 export default function App() {
   const {
     builds,
+    jenkinsFailedJobs,
     coverage,
     bugs,
     trainBlockers,
+    maintainers,
     lastRefreshed,
     loading,
+    initialLoading,
     jenkinsLoading,
     errors,
     refresh,
@@ -116,7 +70,7 @@ export default function App() {
 
           <Panel
             title="Pass / Fail Rates"
-            loading={loading || jenkinsLoading}
+            loading={initialLoading || jenkinsLoading}
             error={errors.jenkins}
             source="Jenkins"
             action={
@@ -140,25 +94,42 @@ export default function App() {
               </>
             }
           >
-            <PassFailPanel builds={builds} error={errors.jenkins} loading={loading || jenkinsLoading} />
+            {jenkinsFailedJobs?.length > 0 && !errors.jenkins && (
+              <div
+                className="mb-3 rounded border border-amber-700/60 bg-amber-900/20 px-3 py-2 text-xs text-amber-300"
+                title={jenkinsFailedJobs.map((j) => `${j.label}: ${j.error}`).join('\n')}
+              >
+                <span className="font-medium">Partial data:</span>{' '}
+                {jenkinsFailedJobs.length} job{jenkinsFailedJobs.length !== 1 ? 's' : ''} failed to load
+                ({jenkinsFailedJobs.slice(0, 3).map((j) => j.label).join(', ')}
+                {jenkinsFailedJobs.length > 3 ? `, +${jenkinsFailedJobs.length - 3} more` : ''})
+              </div>
+            )}
+            <PassFailPanel builds={builds} error={errors.jenkins} loading={initialLoading || jenkinsLoading} />
           </Panel>
 
           <Panel
             title="Code Coverage"
-            loading={loading}
+            loading={initialLoading}
             error={errors.coverage}
             source="Coverage index"
           >
-            <CoveragePanel coverage={coverage} error={errors.coverage} loading={loading} />
+            <CoveragePanel
+              coverage={coverage}
+              error={errors.coverage}
+              loading={initialLoading}
+              maintainers={maintainers}
+              maintainersError={errors.maintainers}
+            />
           </Panel>
 
           <Panel
             title="Job Total Time"
-            loading={loading || jenkinsLoading}
+            loading={initialLoading || jenkinsLoading}
             error={errors.jenkins}
             source="Jenkins"
           >
-            <ExecutionTimePanel builds={builds} error={errors.jenkins} loading={loading || jenkinsLoading} />
+            <ExecutionTimePanel builds={builds} error={errors.jenkins} loading={initialLoading || jenkinsLoading} />
           </Panel>
 
         </div>
@@ -167,11 +138,11 @@ export default function App() {
         <div className="mt-6">
           <Panel
             title="Active Bugs · Past 7 Days"
-            loading={loading}
+            loading={initialLoading}
             error={errors.phabricator}
             source="Phabricator"
           >
-            <BugsPanel bugs={bugs} error={errors.phabricator} loading={loading} />
+            <BugsPanel bugs={bugs} error={errors.phabricator} loading={initialLoading} />
           </Panel>
         </div>
 
@@ -179,14 +150,14 @@ export default function App() {
         <div className="mt-6">
           <Panel
             title="Train Blockers · Previous Release"
-            loading={loading}
+            loading={initialLoading}
             error={errors.trainBlockers}
             source="Phabricator"
           >
             <TrainBlockersPanel
               trainBlockers={trainBlockers}
               error={errors.trainBlockers}
-              loading={loading}
+              loading={initialLoading}
             />
           </Panel>
         </div>

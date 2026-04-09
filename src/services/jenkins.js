@@ -190,18 +190,22 @@ export async function fetchTrackedJobs() {
 
 /**
  * Fetch recent builds across all tracked MediaWiki Jenkins jobs in parallel.
- * If individual jobs fail they are silently skipped so a single unavailable
- * job does not blank the entire panel.
+ * If individual jobs fail they are reported alongside the successful builds
+ * so a single unavailable job does not blank the entire panel while still
+ * letting the UI surface a partial-failure warning.
  *
  * @param {Array} [jobs=DEFAULT_TRACKED_JOBS] - Job list to fetch. Defaults to the
  *   static DEFAULT_TRACKED_JOBS list. Pass the result of fetchTrackedJobs() to use
  *   a dynamically fetched list instead.
- * @returns {Promise<Array<{
- *   job: string,
- *   status: 'passed'|'failed'|'other',
- *   duration_seconds: number,
- *   timestamp: string
- * }>>}
+ * @returns {Promise<{
+ *   builds: Array<{
+ *     job: string,
+ *     status: 'passed'|'failed'|'other',
+ *     duration_seconds: number,
+ *     timestamp: string
+ *   }>,
+ *   failedJobs: Array<{ label: string, error: string }>
+ * }>}
  * @throws {Error} Only when every single job fails (total outage).
  */
 export async function fetchRecentBuilds(jobs = DEFAULT_TRACKED_JOBS) {
@@ -215,13 +219,25 @@ export async function fetchRecentBuilds(jobs = DEFAULT_TRACKED_JOBS) {
     throw failed[0].reason;
   }
 
-  if (failed.length > 0) {
-    // Log partial failures to the console without breaking the UI
+  if (failed.length > 0 && import.meta.env.DEV) {
+    // Log partial failures to the console in dev; production surfaces them
+    // through the `failedJobs` metadata returned alongside `builds`.
     failed.forEach((r) => console.warn('[jenkins.js] Partial fetch failure:', r.reason?.message));
   }
 
   // Flatten all job arrays and sort by timestamp descending
-  return succeeded
+  const builds = succeeded
     .flatMap((r) => r.value)
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  // Extract job labels from rejected reasons. fetchJobBuilds throws errors
+  // whose message starts with `Jenkins job "<label>" returned ...`, so we
+  // parse that back out for the UI banner.
+  const failedJobs = failed.map((r) => {
+    const msg   = r.reason?.message ?? String(r.reason);
+    const match = msg.match(/^Jenkins job "([^"]+)"/);
+    return { label: match ? match[1] : 'unknown', error: msg };
+  });
+
+  return { builds, failedJobs };
 }

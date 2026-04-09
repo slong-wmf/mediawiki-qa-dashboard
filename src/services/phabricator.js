@@ -175,8 +175,10 @@ async function resolveProjectNames(phids) {
     );
   } catch (err) {
     // Project name resolution is best-effort; tasks will fall back to showing
-    // a raw tag count instead of names.  Log so developers can diagnose.
-    console.warn('[phabricator] project.search failed — tag names unavailable:', err?.message ?? err);
+    // a raw tag count instead of names. Log in dev so developers can diagnose.
+    if (import.meta.env.DEV) {
+      console.warn('[phabricator] project.search failed — tag names unavailable:', err?.message ?? err);
+    }
     return {};
   }
 }
@@ -239,9 +241,6 @@ export async function fetchRecentBugs() {
   };
 }
 
-// Keep legacy export so nothing breaks if it's still referenced somewhere
-export { fetchRecentBugs as fetchOpenBugs };
-
 // ── Train Blockers ──────────────────────────────────────────────────────────
 
 /**
@@ -272,7 +271,9 @@ async function resolveUsernames(phids) {
       ]),
     );
   } catch (err) {
-    console.warn('[phabricator] user.search failed — usernames unavailable:', err?.message ?? err);
+    if (import.meta.env.DEV) {
+      console.warn('[phabricator] user.search failed — usernames unavailable:', err?.message ?? err);
+    }
     return {};
   }
 }

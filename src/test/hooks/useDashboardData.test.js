@@ -4,14 +4,17 @@ import { useDashboardData } from '../../hooks/useDashboardData.js';
 import { fetchRecentBuilds, fetchTrackedJobs } from '../../services/jenkins.js';
 import { fetchCoverageData } from '../../services/coverage.js';
 import { fetchRecentBugs, fetchTrainBlockers } from '../../services/phabricator.js';
+import { fetchMaintainers } from '../../services/maintainers.js';
 
 vi.mock('../../services/jenkins.js');
 vi.mock('../../services/coverage.js');
 vi.mock('../../services/phabricator.js');
+vi.mock('../../services/maintainers.js');
 
 const MOCK_BUILDS = [
   { job: 'TestJob', status: 'passed', duration_seconds: 60, timestamp: new Date().toISOString() },
 ];
+const MOCK_JENKINS_RESULT = { builds: MOCK_BUILDS, failedJobs: [] };
 const MOCK_COVERAGE = {
   core: { name: 'mediawiki-core', coverage_pct: 75, last_updated: '2026-04-03' },
   extensions: [],
@@ -35,11 +38,12 @@ describe('useDashboardData', () => {
   ];
 
   beforeEach(() => {
-    fetchRecentBuilds.mockResolvedValue(MOCK_BUILDS);
+    fetchRecentBuilds.mockResolvedValue(MOCK_JENKINS_RESULT);
     fetchCoverageData.mockResolvedValue(MOCK_COVERAGE);
     fetchRecentBugs.mockResolvedValue(MOCK_BUGS);
     fetchTrainBlockers.mockResolvedValue(MOCK_TRAIN_BLOCKERS);
     fetchTrackedJobs.mockResolvedValue(MOCK_JOBS);
+    fetchMaintainers.mockResolvedValue(new Map());
   });
 
   afterEach(() => {
@@ -79,6 +83,7 @@ describe('useDashboardData', () => {
         coverage: null,
         phabricator: null,
         trainBlockers: null,
+        maintainers: null,
       });
     });
   });
@@ -121,6 +126,7 @@ describe('useDashboardData', () => {
         coverage: null,
         phabricator: null,
         trainBlockers: null,
+        maintainers: null,
       });
     });
   });
@@ -167,7 +173,7 @@ describe('useDashboardData', () => {
 
     it('clears a previous error when the source recovers on refresh', async () => {
       const err = new Error('transient');
-      fetchRecentBuilds.mockRejectedValueOnce(err).mockResolvedValue(MOCK_BUILDS);
+      fetchRecentBuilds.mockRejectedValueOnce(err).mockResolvedValue(MOCK_JENKINS_RESULT);
 
       const { result } = renderHook(() => useDashboardData());
       await waitFor(() => expect(result.current.loading).toBe(false));
@@ -264,7 +270,7 @@ describe('useDashboardData', () => {
       expect(result.current.loading).toBe(false);
 
       // Let the build fetch complete.
-      resolveBuilds(MOCK_BUILDS);
+      resolveBuilds(MOCK_JENKINS_RESULT);
       await waitFor(() => expect(result.current.jenkinsLoading).toBe(false));
     });
 
@@ -300,7 +306,7 @@ describe('useDashboardData', () => {
       const freshBuilds = [
         { job: 'Job A', status: 'failed', duration_seconds: 30, timestamp: new Date().toISOString() },
       ];
-      fetchRecentBuilds.mockResolvedValueOnce(freshBuilds);
+      fetchRecentBuilds.mockResolvedValueOnce({ builds: freshBuilds, failedJobs: [] });
 
       await act(async () => { await result.current.refreshJobList(); });
 

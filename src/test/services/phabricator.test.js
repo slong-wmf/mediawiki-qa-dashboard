@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   statusGroup,
   mapPriority,
-  isSuspectedBug,
   shapeTask,
   fetchRecentBugs,
 } from '../../services/phabricator.js';
@@ -60,51 +59,6 @@ describe('mapPriority', () => {
   });
 });
 
-// ── isSuspectedBug ────────────────────────────────────────────────────────────
-
-describe('isSuspectedBug', () => {
-  describe('positive cases — titles containing bug-signal keywords', () => {
-    it('matches "bug"', () => expect(isSuspectedBug('Login bug in VisualEditor')).toBe(true));
-    it('matches "regression"', () => expect(isSuspectedBug('Regression in search')).toBe(true));
-    it('matches "broken"', () => expect(isSuspectedBug('Upload is broken')).toBe(true));
-    it('matches "fail"', () => expect(isSuspectedBug('CI fail on PHP 8.3')).toBe(true));
-    it('matches "failing"', () => expect(isSuspectedBug('Tests failing in beta')).toBe(true));
-    it('matches "failure"', () => expect(isSuspectedBug('Failure to load extension')).toBe(true));
-    it('matches "crash"', () => expect(isSuspectedBug('Parser crash on large wikitext')).toBe(true));
-    it('matches "error"', () => expect(isSuspectedBug('500 error on save')).toBe(true));
-    it('matches "exception"', () => expect(isSuspectedBug('Uncaught exception in Hook')).toBe(true));
-    it('matches "not working"', () => expect(isSuspectedBug('Upload not working')).toBe(true));
-    it('matches "fix " (with trailing space)', () => expect(isSuspectedBug('fix API endpoint')).toBe(true));
-    it('matches " fix:" (with leading space)', () => expect(isSuspectedBug('Login fix: revert bad commit')).toBe(true));
-    it('is case-insensitive', () => expect(isSuspectedBug('BUG: incorrect redirect')).toBe(true));
-    it('matches "hotfix"', () => expect(isSuspectedBug('Deploy hotfix for outage')).toBe(true));
-    it('matches "incorrect"', () => expect(isSuspectedBug('Incorrect diff display')).toBe(true));
-    it('matches "wrong"', () => expect(isSuspectedBug('Wrong user shown in history')).toBe(true));
-  });
-
-  describe('negative cases — titles without bug-signal keywords', () => {
-    it('does not match a generic task title', () => {
-      expect(isSuspectedBug('Add dark mode to preferences')).toBe(false);
-    });
-    it('does not match a feature request title', () => {
-      expect(isSuspectedBug('Improve search ranking for categories')).toBe(false);
-    });
-    it('does not match an empty string', () => {
-      expect(isSuspectedBug('')).toBe(false);
-    });
-  });
-
-  describe('edge cases — partial-word avoidance', () => {
-    // "fix " has a trailing space to avoid matching "prefix", "suffix", etc.
-    it('does not match "prefix"', () => {
-      expect(isSuspectedBug('Update url prefix setting')).toBe(false);
-    });
-    it('does not match "suffix"', () => {
-      expect(isSuspectedBug('Add language suffix support')).toBe(false);
-    });
-  });
-});
-
 // ── shapeTask ─────────────────────────────────────────────────────────────────
 
 const BASE_RAW_TASK = {
@@ -147,11 +101,6 @@ describe('shapeTask', () => {
       expect(task.priority).toBe('high');
       expect(task.priorityLabel).toBe('High');
       expect(task.priorityValue).toBe(80);
-    });
-
-    it('sets isSuspectedBug to true for a bug-signal title', () => {
-      const task = shapeTask(BASE_RAW_TASK, CUT_OFF_EPOCH);
-      expect(task.isSuspectedBug).toBe(true); // title contains "regression"
     });
 
     it('sets isNew to true when createdAt is after the cutoff', () => {

@@ -3,6 +3,7 @@ import PassFailPanel from './components/PassFailPanel.jsx';
 import CoveragePanel from './components/CoveragePanel.jsx';
 import ExecutionTimePanel from './components/ExecutionTimePanel.jsx';
 import BugsPanel from './components/BugsPanel.jsx';
+import TrainBlockersPanel from './components/TrainBlockersPanel.jsx';
 
 /**
  * Skeleton placeholder shown while data is loading.
@@ -70,6 +71,7 @@ export default function App() {
     builds,
     coverage,
     bugs,
+    trainBlockers,
     lastRefreshed,
     loading,
     jenkinsLoading,
@@ -170,6 +172,22 @@ export default function App() {
             source="Phabricator"
           >
             <BugsPanel bugs={bugs} error={errors.phabricator} loading={loading} />
+          </Panel>
+        </div>
+
+        {/* ── Train blockers row (full width) ── */}
+        <div className="mt-6">
+          <Panel
+            title="Train Blockers · Previous Release"
+            loading={loading}
+            error={errors.trainBlockers}
+            source="Phabricator"
+          >
+            <TrainBlockersPanel
+              trainBlockers={trainBlockers}
+              error={errors.trainBlockers}
+              loading={loading}
+            />
           </Panel>
         </div>
 

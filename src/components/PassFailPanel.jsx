@@ -251,12 +251,16 @@ export default function PassFailPanel({ builds, error, loading }) {
                 >
                   <td className="py-1.5 pr-3 text-gray-300 max-w-[120px]">
                     <a
-                      href={build.job_url}
+                      href={view === 'tests'
+                        ? `${build.job_url}lastCompletedBuild/testReport/`
+                        : build.job_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
                       className="hover:text-blue-400 hover:underline transition-colors truncate block"
-                      title={build.job}
+                      title={view === 'tests'
+                        ? `Open test report for ${build.job}`
+                        : build.job}
                     >
                       {build.job}
                     </a>

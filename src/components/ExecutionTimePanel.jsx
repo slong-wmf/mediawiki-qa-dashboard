@@ -118,9 +118,9 @@ export default function ExecutionTimePanel({ builds, error, loading }) {
 
   const hasSlowJobs = chartData.some((d) => d.avgDuration >= 300); // amber or red
 
-  const handleBarClick = (data) => {
-    if (data?.activePayload?.[0]?.payload?.job_url) {
-      window.open(data.activePayload[0].payload.job_url, '_blank', 'noopener');
+  const handleBarClick = (barData) => {
+    if (barData?.job_url) {
+      window.open(barData.job_url, '_blank', 'noopener');
     }
   };
 
@@ -133,8 +133,6 @@ export default function ExecutionTimePanel({ builds, error, loading }) {
         <BarChart
           data={chartData}
           margin={{ top: 4, right: 8, left: -20, bottom: 40 }}
-          onClick={handleBarClick}
-          style={{ cursor: 'pointer' }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
           <XAxis
@@ -151,7 +149,12 @@ export default function ExecutionTimePanel({ builds, error, loading }) {
             tickFormatter={(v) => `${v}s`}
           />
           <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="avgDuration" radius={[3, 3, 0, 0]}>
+          <Bar
+            dataKey="avgDuration"
+            radius={[3, 3, 0, 0]}
+            onClick={handleBarClick}
+            style={{ cursor: 'pointer' }}
+          >
             {chartData.map((entry, i) => (
               <Cell key={i} fill={barColour(entry.avgDuration)} />
             ))}

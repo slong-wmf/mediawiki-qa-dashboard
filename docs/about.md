@@ -12,7 +12,7 @@ Technical reference covering the frameworks, libraries, coding methodologies, an
 | `react-dom` | ^19.2.4 | Mounts the React tree into the browser DOM |
 | `recharts` | ^3.8.1 | SVG-based charting (pie charts, bar charts) |
 
-**Tailwind CSS** is loaded via the CDN script in `index.html` for development convenience. For production, replace with the PostCSS plugin and a proper build step so unused styles are purged.
+**Tailwind CSS** is loaded via the CDN script in `index.html` for development convenience. In production, an idea is to replace with the PostCSS plugin and a proper build step so unused styles are purged.
 
 ---
 
@@ -31,7 +31,7 @@ Vite was chosen for its near-instant cold start and Hot Module Replacement, whic
 | `/api/phabricator` | `https://phabricator.wikimedia.org/api` |
 | `/api/coverage` | `https://doc.wikimedia.org` |
 
-A production deployment requires a real server-side reverse proxy in place of the Vite proxy.
+In a production deployment, this would change to a reverse proxy in place of the Vite proxy.
 
 ---
 

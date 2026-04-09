@@ -68,6 +68,53 @@ VITE_PHABRICATOR_TOKEN=api-yourtoken
 
 ---
 
+---
+
+## 4. Refreshing the Wikipedia Extension List
+
+The "Wikipedia only" filter in the Code Coverage panel is driven by a static list of
+extensions deployed on en.wikipedia.org, stored in `src/data/activeExtensions.js`.
+This list was generated on **2026-04-03** and should be refreshed periodically as the
+set of deployed extensions changes.
+
+### How to regenerate the list
+
+**Step 1 — Fetch the current extension list from the Wikipedia siteinfo API:**
+
+```bash
+curl -s "https://en.wikipedia.org/w/api.php?action=query&meta=siteinfo&siprop=extensions&format=json" \
+  | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+exts = data['query']['extensions']
+names = sorted(set(e.get('name','') for e in exts if e.get('name')))
+for n in names:
+    print(n)
+"
+```
+
+**Step 2 — Cross-reference against doc.wikimedia.org:**
+
+The coverage index at `https://doc.wikimedia.org/cover-extensions/` uses directory names
+that sometimes differ from the API name (e.g. spaces, capitalisation). Compare the list
+from Step 1 against the directory names in the coverage index and update the alias map
+at the bottom of `activeExtensions.js` for any new mismatches.
+
+**Step 3 — Update the file:**
+
+1. Replace the contents of the `WIKIPEDIA_DEPLOYED` set in `src/data/activeExtensions.js`
+   with the new list.
+2. Update the `GENERATED_DATE` constant at the top of the file to today's date
+   (`'YYYY-MM-DD'`).
+3. Run `npm run test:run` — the `activeExtensions.test.js` suite will catch obvious
+   regressions (set size, known extension presence, alias coverage).
+
+> **Tip:** Exclude skins (Vector, MonoBook, Timeless, etc.) and non-extension entries
+> such as `WikimediaCaptcha` that appear in the API response but are not tracked on
+> doc.wikimedia.org.
+
+---
+
 ## Complete `.env` Example
 
 ```dotenv

@@ -160,7 +160,7 @@ export default function BugsPanel({ bugs, error, loading }) {
         <div>
           <p className="text-3xl font-bold text-white leading-none">{totalFetched}</p>
           <p className="text-xs text-gray-400 mt-0.5">
-            open tasks active in the past 7 days
+            active bug{totalFetched !== 1 ? 's' : ''} in the past 7 days
             {hasMore && <span className="text-amber-400"> (200+ — showing first 200)</span>}
           </p>
         </div>
@@ -256,9 +256,6 @@ export default function BugsPanel({ bugs, error, loading }) {
                   </td>
                   <td className="py-1.5 pr-2 text-gray-200 max-w-[160px]">
                     <span className="block truncate" title={task.title}>
-                      {task.isSuspectedBug && !showAll && (
-                        <span className="text-amber-400 mr-1" title="Suspected bug (keyword match)">🐛</span>
-                      )}
                       {task.isNew && (
                         <span className="mr-1 text-green-500 font-semibold" title="Filed this week">NEW</span>
                       )}

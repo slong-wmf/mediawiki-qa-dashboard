@@ -87,9 +87,16 @@ describe('CoveragePanel', () => {
   });
 
   describe('with data', () => {
-    it('renders the mediawiki-core headline coverage percentage', () => {
+    it('renders the median coverage headline', () => {
+      // COVERAGE has AbuseFilter (90%) and Echo (68%), both in WIKIPEDIA_DEPLOYED.
+      // Sorted: [68, 90] — even count, so median = round((68 + 90) / 2) = 79.
       render(<CoveragePanel coverage={COVERAGE} loading={false} error={null} />);
-      expect(screen.getByText('75%')).toBeInTheDocument();
+      expect(screen.getByText('79%')).toBeInTheDocument();
+    });
+
+    it('shows the "Median coverage" label', () => {
+      render(<CoveragePanel coverage={COVERAGE} loading={false} error={null} />);
+      expect(screen.getByText(/Median coverage/i)).toBeInTheDocument();
     });
 
     it('renders the bar chart after switching to Top 15 view', () => {
@@ -97,11 +104,6 @@ describe('CoveragePanel', () => {
       // Default view is Table; switch to chart view first.
       fireEvent.click(screen.getByText('Top 15'));
       expect(screen.getByTestId('bar-chart')).toBeInTheDocument();
-    });
-
-    it('shows the "mediawiki-core" label', () => {
-      render(<CoveragePanel coverage={COVERAGE} loading={false} error={null} />);
-      expect(screen.getByText('mediawiki-core')).toBeInTheDocument();
     });
 
     it('shows stat bucket cards', () => {
@@ -125,10 +127,13 @@ describe('CoveragePanel', () => {
       expect(screen.getByText(/3 extensions · avg/i)).toBeInTheDocument();
     });
 
-    it('shows "mediawiki-core entry not found" when core is null', () => {
-      const noCoverage = { ...COVERAGE, core: null };
+    it('shows "No coverage data available" when there are no extensions with coverage', () => {
+      const noCoverage = {
+        core: null,
+        extensions: [{ name: 'AbuseFilter', coverage_pct: 0, last_updated: '2026-04-01 GMT', page_url: 'https://doc.wikimedia.org/cover-extensions/AbuseFilter/' }],
+      };
       render(<CoveragePanel coverage={noCoverage} loading={false} error={null} />);
-      expect(screen.getByText(/mediawiki-core entry not found/i)).toBeInTheDocument();
+      expect(screen.getByText(/No coverage data available/i)).toBeInTheDocument();
     });
   });
 });

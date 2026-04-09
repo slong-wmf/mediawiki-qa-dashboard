@@ -3,7 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { useDashboardData } from '../../hooks/useDashboardData.js';
 import { fetchRecentBuilds, fetchTrackedJobs } from '../../services/jenkins.js';
 import { fetchCoverageData } from '../../services/coverage.js';
-import { fetchRecentBugs } from '../../services/phabricator.js';
+import { fetchRecentBugs, fetchTrainBlockers } from '../../services/phabricator.js';
 
 vi.mock('../../services/jenkins.js');
 vi.mock('../../services/coverage.js');
@@ -22,6 +22,11 @@ const MOCK_BUGS = {
   hasMore: false,
   cutoffDate: new Date(Date.now() - 7 * 86_400_000).toISOString(),
 };
+const MOCK_TRAIN_BLOCKERS = {
+  trainTask: { id: 420481, title: '1.46.0-wmf.22 deployment blockers', url: 'https://phabricator.wikimedia.org/T420481', version: '1.46.0-wmf.22', closedAt: new Date().toISOString(), closerUsername: 'testuser' },
+  blockers: [],
+  totalBlockers: 0,
+};
 
 describe('useDashboardData', () => {
   const MOCK_JOBS = [
@@ -33,6 +38,7 @@ describe('useDashboardData', () => {
     fetchRecentBuilds.mockResolvedValue(MOCK_BUILDS);
     fetchCoverageData.mockResolvedValue(MOCK_COVERAGE);
     fetchRecentBugs.mockResolvedValue(MOCK_BUGS);
+    fetchTrainBlockers.mockResolvedValue(MOCK_TRAIN_BLOCKERS);
     fetchTrackedJobs.mockResolvedValue(MOCK_JOBS);
   });
 
@@ -65,12 +71,14 @@ describe('useDashboardData', () => {
       fetchRecentBuilds.mockImplementation(() => new Promise(() => {}));
       fetchCoverageData.mockImplementation(() => new Promise(() => {}));
       fetchRecentBugs.mockImplementation(() => new Promise(() => {}));
+      fetchTrainBlockers.mockImplementation(() => new Promise(() => {}));
 
       const { result } = renderHook(() => useDashboardData());
       expect(result.current.errors).toEqual({
         jenkins: null,
         coverage: null,
         phabricator: null,
+        trainBlockers: null,
       });
     });
   });
@@ -112,6 +120,7 @@ describe('useDashboardData', () => {
         jenkins: null,
         coverage: null,
         phabricator: null,
+        trainBlockers: null,
       });
     });
   });

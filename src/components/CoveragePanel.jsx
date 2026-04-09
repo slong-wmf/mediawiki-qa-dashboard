@@ -206,6 +206,16 @@ export default function CoveragePanel({ coverage, error, loading }) {
   const total   = filteredExtensions.length;
   const avg     = Math.round(filteredExtensions.reduce((s, e) => s + e.coverage_pct, 0) / (total || 1));
 
+  // Median coverage across extensions that have any coverage data (pct > 0).
+  const medianCoverage = useMemo(() => {
+    const sorted = [...withCoverage].map((e) => e.coverage_pct).sort((a, b) => a - b);
+    if (!sorted.length) return null;
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
+      : sorted[mid];
+  }, [withCoverage]);
+
   // Detail table shown when a stat card is active
   const bucketExtensions = activeBucket
     ? filteredExtensions.filter(BUCKETS[activeBucket].filter).sort((a, b) => b.coverage_pct - a.coverage_pct)
@@ -300,23 +310,23 @@ export default function CoveragePanel({ coverage, error, loading }) {
         )}
       </div>
 
-      {/* ── Core headline ── */}
-      {core ? (
+      {/* ── Median headline ── */}
+      {medianCoverage !== null ? (
         <div className="text-center">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">mediawiki-core</p>
-          <a
-            href={core.page_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open mediawiki-core coverage on doc.wikimedia.org"
-            className={`text-5xl font-bold hover:underline transition-opacity hover:opacity-80 ${coverageColour(core.coverage_pct)}`}
-          >
-            {core.coverage_pct}%
-          </a>
-          <p className="text-xs text-gray-500 mt-1">Updated {core.last_updated}</p>
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">
+            Median coverage
+            {wikiOnly ? ' · Wikipedia extensions' : ' · all extensions'}
+            {activeSteward ? ` · ${activeSteward}` : ''}
+          </p>
+          <p className={`text-5xl font-bold ${coverageColour(medianCoverage)}`}>
+            {medianCoverage}%
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            across {withCoverage.length} extension{withCoverage.length !== 1 ? 's' : ''} with coverage data
+          </p>
         </div>
       ) : (
-        <p className="text-gray-500 text-sm italic text-center">mediawiki-core entry not found</p>
+        <p className="text-gray-500 text-sm italic text-center">No coverage data available</p>
       )}
 
       {/* ── No-coverage note for steward filter ── */}

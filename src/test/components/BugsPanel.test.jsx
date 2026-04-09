@@ -17,7 +17,6 @@ function makeTask(overrides = {}) {
     createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
     modifiedAt: new Date(Date.now() - 3_600_000).toISOString(),
     isNew: false,
-    isSuspectedBug: true,
     ...overrides,
   };
 }
@@ -64,9 +63,9 @@ describe('BugsPanel', () => {
 
   describe('with task data', () => {
     const bugs = makeBugs([
-      makeTask({ id: 1, title: 'Fix login regression', isSuspectedBug: true, statusGroup: 'open' }),
-      makeTask({ id: 2, title: 'Improve search speed', isSuspectedBug: false, statusGroup: 'in-progress' }),
-      makeTask({ id: 3, title: 'Crash on save', isSuspectedBug: true, priorityValue: 100, priority: 'unbreak-now' }),
+      makeTask({ id: 1, title: 'Fix login regression', statusGroup: 'open' }),
+      makeTask({ id: 2, title: 'Improve search speed', statusGroup: 'in-progress' }),
+      makeTask({ id: 3, title: 'Crash on save', priorityValue: 100, priority: 'unbreak-now' }),
     ]);
 
     it('renders the total task count headline', () => {
@@ -86,25 +85,16 @@ describe('BugsPanel', () => {
       expect(rows[1]).toHaveTextContent('T3');
     });
 
-    it('defaults to showing only suspected bugs', () => {
+    it('renders all tasks in the table', () => {
       render(<BugsPanel bugs={bugs} loading={false} error={null} />);
-      // "All tasks" button shows total
-      expect(screen.getByText(/All tasks \(3\)/)).toBeInTheDocument();
-      // The suspected bugs button should be active by default
-      expect(screen.getByText(/Suspected bugs \(2\)/)).toBeInTheDocument();
-    });
-
-    it('switches to showing all tasks when "All tasks" is clicked', () => {
-      render(<BugsPanel bugs={bugs} loading={false} error={null} />);
-      fireEvent.click(screen.getByText(/All tasks \(3\)/));
-      // All three task IDs should now be visible
       expect(screen.getByText('T1')).toBeInTheDocument();
       expect(screen.getByText('T2')).toBeInTheDocument();
+      expect(screen.getByText('T3')).toBeInTheDocument();
     });
 
-    it('shows a warning about comment-based bugs not being detected', () => {
+    it('shows the criteria note describing subtype-based detection', () => {
       render(<BugsPanel bugs={bugs} loading={false} error={null} />);
-      expect(screen.getByText(/Bugs noted in comments/i)).toBeInTheDocument();
+      expect(screen.getByText(/Bug Report/i)).toBeInTheDocument();
     });
   });
 
@@ -132,7 +122,7 @@ describe('BugsPanel', () => {
     it('renders a filter card for each status group that has tasks', () => {
       const bugs = makeBugs([
         makeTask({ statusGroup: 'open' }),
-        makeTask({ id: 2, statusGroup: 'stalled', isSuspectedBug: false }),
+        makeTask({ id: 2, statusGroup: 'stalled' }),
       ]);
       render(<BugsPanel bugs={bugs} loading={false} error={null} />);
       // Target the filter card buttons by their title attribute to avoid
@@ -143,12 +133,10 @@ describe('BugsPanel', () => {
 
     it('filters the table when a status card is clicked', () => {
       const bugs = makeBugs([
-        makeTask({ id: 1, title: 'Fix crash', statusGroup: 'open', isSuspectedBug: true }),
-        makeTask({ id: 2, title: 'Update docs', statusGroup: 'in-progress', isSuspectedBug: false }),
+        makeTask({ id: 1, title: 'Fix crash', statusGroup: 'open' }),
+        makeTask({ id: 2, title: 'Update docs', statusGroup: 'in-progress' }),
       ]);
       render(<BugsPanel bugs={bugs} loading={false} error={null} />);
-      // Switch to all tasks so both are visible
-      fireEvent.click(screen.getByText(/All tasks \(2\)/));
       // Click the In Progress filter card via its unique title attribute —
       // using getByText('In Progress') would be ambiguous because the status
       // badge in the task row also renders that same text.

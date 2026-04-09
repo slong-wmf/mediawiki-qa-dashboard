@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchRecentBuilds, fetchTrackedJobs } from '../services/jenkins.js';
 import { fetchCoverageData } from '../services/coverage.js';
-import { fetchRecentBugs } from '../services/phabricator.js';
+import { fetchRecentBugs, fetchTrainBlockers } from '../services/phabricator.js';
 
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 3_600_000;
 
@@ -19,6 +19,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
  * @property {Error|null} jenkins
  * @property {Error|null} coverage
  * @property {Error|null} phabricator
+ * @property {Error|null} trainBlockers
  */
 
 /**
@@ -26,6 +27,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
  * @property {Array}           builds           - Jenkins CI build records
  * @property {object|null}     coverage         - { core, extensions } from doc.wikimedia.org
  * @property {Array}           bugs             - Phabricator open task records
+ * @property {object|null}     trainBlockers    - { trainTask, blockers, totalBlockers } for the previous train
  * @property {Date|null}       lastRefreshed    - Timestamp of the last completed fetch cycle
  * @property {boolean}         loading          - True until the first full fetch completes
  * @property {boolean}         jenkinsLoading   - True only while a Jenkins-only re-fetch is running
@@ -48,12 +50,13 @@ export function useDashboardData() {
   const [builds, setBuilds] = useState([]);
   const [coverage, setCoverage] = useState(null);
   const [bugs, setBugs] = useState([]);
+  const [trainBlockers, setTrainBlockers] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [loading, setLoading] = useState(true);
   // Separate from `loading` so clicking "Fetch Job Information" only shows a
   // skeleton on the Jenkins panels, leaving coverage and bugs panels untouched.
   const [jenkinsLoading, setJenkinsLoading] = useState(false);
-  const [errors, setErrors] = useState({ jenkins: null, coverage: null, phabricator: null });
+  const [errors, setErrors] = useState({ jenkins: null, coverage: null, phabricator: null, trainBlockers: null });
   const [jobListLoading, setJobListLoading] = useState(false);
   const [jobListError, setJobListError] = useState(null);
 
@@ -70,10 +73,11 @@ export function useDashboardData() {
     // will fall back to DEFAULT_TRACKED_JOBS.
     const jobList = trackedJobsRef.current ?? undefined;
 
-    const [jenkinsResult, coverageResult, phabResult] = await Promise.allSettled([
+    const [jenkinsResult, coverageResult, phabResult, trainBlockersResult] = await Promise.allSettled([
       fetchRecentBuilds(jobList),
       fetchCoverageData(),
       fetchRecentBugs(),
+      fetchTrainBlockers(),
     ]);
 
     // Update each source independently so a single failure doesn't wipe the rest
@@ -96,6 +100,13 @@ export function useDashboardData() {
       setErrors((prev) => ({ ...prev, phabricator: null }));
     } else {
       setErrors((prev) => ({ ...prev, phabricator: phabResult.reason }));
+    }
+
+    if (trainBlockersResult.status === 'fulfilled') {
+      setTrainBlockers(trainBlockersResult.value);
+      setErrors((prev) => ({ ...prev, trainBlockers: null }));
+    } else {
+      setErrors((prev) => ({ ...prev, trainBlockers: trainBlockersResult.reason }));
     }
 
     setLastRefreshed(new Date());
@@ -177,6 +188,7 @@ export function useDashboardData() {
     builds,
     coverage,
     bugs,
+    trainBlockers,
     lastRefreshed,
     loading,
     jenkinsLoading,

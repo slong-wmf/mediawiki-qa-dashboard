@@ -106,19 +106,15 @@ function RelativeTime({ iso }) {
 /**
  * Phabricator Bugs panel.
  *
- * Shows open Phabricator tasks modified within the past 7 days, grouped and
- * filterable by status.  Tasks with bug-signal keywords in their title are
- * flagged separately as "suspected bugs".
- *
- * ⚠ Limitation: Bugs noted in *comments* on existing tasks cannot be detected
- * via the Conduit API without downloading every transaction; this panel surfaces
- * title-keyword matches as a proxy and notes the gap explicitly.
+ * Shows open Phabricator tasks with subtype "bug" or "error" (Bug Report /
+ * Production Error forms) modified within the past 7 days, grouped and
+ * filterable by status.  Security subtypes are excluded — they are not
+ * publicly viewable outside the foundation.
  *
  * @param {{ bugs: { tasks, totalFetched, hasMore, cutoffDate }|null, error: Error|null, loading: boolean }} props
  */
 export default function BugsPanel({ bugs, error, loading }) {
   const [activeGroup, setActiveGroup] = useState(null); // status group filter
-  const [showAll,     setShowAll]     = useState(false); // toggle suspected-bugs-only vs all
 
   if (loading) return <Skeleton />;
 
@@ -144,14 +140,12 @@ export default function BugsPanel({ bugs, error, loading }) {
   const countByGroup = Object.fromEntries(
     STATUS_GROUPS.map((g) => [g, tasks.filter((t) => t.statusGroup === g).length]),
   );
-  const suspectedBugs = tasks.filter((t) => t.isSuspectedBug);
-  const newTaskCount  = tasks.filter((t) => t.isNew).length;
+  const newTaskCount = tasks.filter((t) => t.isNew).length;
 
   // ── Filtered table rows ──────────────────────────────────────────────────
-  const baseList = showAll ? tasks : suspectedBugs.length > 0 ? suspectedBugs : tasks;
   const filtered = activeGroup
-    ? baseList.filter((t) => t.statusGroup === activeGroup)
-    : baseList;
+    ? tasks.filter((t) => t.statusGroup === activeGroup)
+    : tasks;
   // Sort: unbreak-now first, then by most recently modified
   const sorted = [...filtered].sort((a, b) => {
     if (b.priorityValue !== a.priorityValue) return b.priorityValue - a.priorityValue;
@@ -171,8 +165,6 @@ export default function BugsPanel({ bugs, error, loading }) {
           </p>
         </div>
         <div className="text-right text-xs text-gray-500 leading-snug">
-          <span className="text-amber-300 font-medium">{suspectedBugs.length}</span> suspected bugs
-          <br />
           <span className="text-green-400 font-medium">{newTaskCount}</span> newly filed this week
         </div>
       </div>
@@ -202,37 +194,17 @@ export default function BugsPanel({ bugs, error, loading }) {
         })}
       </div>
 
-      {/* ── Scope toggle + filter bar ── */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex rounded overflow-hidden border border-gray-600 text-xs">
-          <button
-            onClick={() => setShowAll(false)}
-            className={`px-2 py-0.5 transition-colors ${
-              !showAll ? 'bg-amber-700 text-white' : 'bg-transparent text-gray-400 hover:text-gray-200'
-            }`}
-            title="Show only tasks with bug-signal keywords in their title"
-          >
-            Suspected bugs ({suspectedBugs.length})
-          </button>
-          <button
-            onClick={() => setShowAll(true)}
-            className={`px-2 py-0.5 transition-colors ${
-              showAll ? 'bg-gray-600 text-white' : 'bg-transparent text-gray-400 hover:text-gray-200'
-            }`}
-            title="Show all open tasks modified this week"
-          >
-            All tasks ({totalFetched})
-          </button>
-        </div>
-        {activeGroup && (
+      {/* ── Filter bar ── */}
+      {activeGroup && (
+        <div className="flex justify-end">
           <button
             onClick={() => setActiveGroup(null)}
             className="text-xs text-blue-400 hover:text-blue-300"
           >
             Clear filter ×
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Criteria + limitation notes ── */}
       <div className="space-y-1">
@@ -241,18 +213,9 @@ export default function BugsPanel({ bugs, error, loading }) {
           and not in a resolved, declined, invalid, wontfix, spite, or duplicate state.
         </p>
         <p className="text-xs text-gray-600 leading-snug border-l-2 border-gray-700 pl-2">
-          <span className="text-gray-500">Suspected bug</span> = task title contains a bug-signal
-          keyword such as <em>bug</em>, <em>regression</em>, <em>broken</em>, <em>crash</em>,
-          <em> error</em>, <em>fix</em>, <em>fail</em>, <em>not working</em>, etc.
-          Tasks whose titles describe access requests, RfCs, feature requests, investigations,
-          or stewardship changes are <strong className="text-gray-400">not</strong> flagged
-          unless their title also contains one of those keywords.
-        </p>
-        <p className="text-xs text-gray-600 leading-snug border-l-2 border-gray-700 pl-2">
-          <span className="text-gray-500">⚠ Bugs noted in comments</span> on existing tasks cannot
-          be detected via the Phabricator API without fetching every transaction.
-          "Suspected bugs" are flagged by title keywords only — check individual tasks
-          for in-thread bug reports.
+          Tasks with subtype <em>Bug Report</em> or <em>Production Error</em>,
+          modified in the past 7 days and not closed.
+          Security tasks are excluded as they are not publicly viewable.
         </p>
       </div>
 

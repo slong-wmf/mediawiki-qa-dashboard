@@ -85,13 +85,12 @@ export default function PassFailPanel({ builds, error, loading }) {
   const hasTestData = buildsWithTests.length > 0;
 
   // ── Table rows ───────────────────────────────────────────────────────────
-  const tableBuilds = (
+  const tableBuilds =
     view === 'tests'
       ? buildsWithTests
-      : (activeStatus
-          ? builds.filter((b) => b.status === STATUS_MAP[activeStatus])
-          : builds.slice(0, 10))
-  ).slice(0, 20);
+      : activeStatus
+        ? builds.filter((b) => b.status === STATUS_MAP[activeStatus])
+        : builds;
 
   const handleSliceClick = (entry) => {
     if (view === 'jobs') setActiveStatus((prev) => (prev === entry.name ? null : entry.name));
@@ -222,16 +221,17 @@ export default function PassFailPanel({ builds, error, loading }) {
 
       {/* ── Table ── */}
       {tableBuilds.length > 0 && (
-        <div className="overflow-x-auto">
+        <div>
           <p className="text-xs text-gray-500 mb-1">
             {view === 'tests'
               ? `${tableBuilds.length} build${tableBuilds.length !== 1 ? 's' : ''} with test reports — click a row to open in Jenkins`
               : activeStatus
                 ? `${tableBuilds.length} ${activeStatus.toLowerCase()} build${tableBuilds.length !== 1 ? 's' : ''} — click a row to open in Jenkins`
-                : '10 most recent builds — click a row to open in Jenkins'}
+                : `${tableBuilds.length} build${tableBuilds.length !== 1 ? 's' : ''} — click a row to open in Jenkins`}
           </p>
+          <div className="overflow-x-auto overflow-y-auto max-h-72">
           <table className="w-full text-xs text-left">
-            <thead>
+            <thead className="sticky top-0 bg-gray-800">
               <tr className="border-b border-gray-700 text-gray-400">
                 <th className="pb-1 pr-3 font-medium">Job</th>
                 <th className="pb-1 pr-3 font-medium">
@@ -290,6 +290,7 @@ export default function PassFailPanel({ builds, error, loading }) {
               ))}
             </tbody>
           </table>
+          </div>
           {view === 'tests' && (
             <p className="text-xs text-gray-600 mt-1">P = passed · F = failed · S = skipped</p>
           )}

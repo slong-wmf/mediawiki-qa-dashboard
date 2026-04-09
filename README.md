@@ -127,6 +127,7 @@ file so a failure tells you exactly which file and URL is broken.
 
 ## Further Reading
 
+- [About](docs/about.md) — dependencies, frameworks, coding methodologies, and testing strategy
 - [API Setup Guide](docs/api-setup.md) — how to create tokens for each service
 - [Architecture](docs/architecture.md) — data flow diagram and component tree
 - [Security](docs/security.md) — security checklist and rate-limiting notes

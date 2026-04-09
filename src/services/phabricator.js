@@ -66,46 +66,6 @@ export function mapPriority(value) {
   return PRIORITY_MAP[value] ?? { label: `P${value}`, key: `p${value}` };
 }
 
-// ── Bug-signal keyword matching ─────────────────────────────────────────────
-
-/**
- * Keywords used to identify likely bug reports among Phabricator tasks.
- *
- * IMPORTANT — title-only matching:
- * This search inspects only the task *title* (subject line). It does NOT scan
- * task descriptions, comments, or any other fields. A task whose title says
- * "Investigate performance" would not be flagged even if every comment describes
- * a crash. Scanning comments would require fetching the full transaction history
- * for every task, which is prohibitively expensive at scale.
- *
- * A task is flagged as a suspected bug when its lowercased title contains any
- * of the strings below. Partial-word matches are intentional for some terms
- * (e.g. "fail" catches "failing", "failure") but avoided for others where they
- * would produce false positives (e.g. "fix " with a trailing space avoids
- * matching "prefix" or "suffix").
- */
-const BUG_KEYWORDS = [
-  'bug', 'regression', 'broken', 'broke', 'breaks', 'breaking',
-  'fail', 'fails', 'failing', 'failure',
-  'crash', 'error', 'exception',
-  'not working', 'doesn\'t work', 'does not work',
-  'unexpected', 'incorrect', 'wrong',
-  'hotfix',
-];
-
-/**
- * Returns true if the task title contains any bug-signal keywords.
- * @param {string} title
- * @returns {boolean}
- */
-export function isSuspectedBug(title) {
-  const lower = title.toLowerCase();
-  // Use a word-boundary regex for "fix" so that words like "prefix" and "suffix"
-  // are not false-positively flagged — e.g. "prefix setting" would otherwise match
-  // the plain substring "fix " (the trailing space lands on the word boundary).
-  if (/\bfix\b/.test(lower)) return true;
-  return BUG_KEYWORDS.some((kw) => lower.includes(kw));
-}
 
 // ── API call helpers ────────────────────────────────────────────────────────
 
@@ -179,7 +139,6 @@ export function shapeTask(raw, cutoffEpoch, phidToName = {}) {
     modifiedAt:   new Date(modifiedEp * 1000).toISOString(),
     // Created within the look-back window = freshly filed
     isNew:        createdEp >= cutoffEpoch,
-    isSuspectedBug: isSuspectedBug(title),
     projectNames,        // display names of all Phabricator project tags on this task
     projectCount: projectPHIDs.length, // total tag count (non-zero even when names failed to resolve)
   };
@@ -230,12 +189,16 @@ export async function fetchRecentBugs() {
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const params = new URLSearchParams({
-      'constraints[modifiedStart]': String(cutoffEpoch),
-      'order':                      'updated',
-      'limit':                      String(PAGE_LIMIT),
+      'constraints[modifiedStart]':    String(cutoffEpoch),
+      // Only fetch tasks filed as Bug Reports or Production Errors.
+      // Security subtypes are excluded — they are not publicly viewable outside the foundation.
+      'constraints[subtypes][0]':      'bug',
+      'constraints[subtypes][1]':      'error',
+      'order':                         'updated',
+      'limit':                         String(PAGE_LIMIT),
       // Request the projects attachment so we can show Phabricator tags per task.
       // Resolving the PHIDs to names is done in a single batch call after pagination.
-      'attachments[projects]':      '1',
+      'attachments[projects]':         '1',
     });
 
     // Include all broad status categories — we filter closed ones client-side

@@ -22,6 +22,8 @@
  * in the HTML index pages — no need to fetch individual clover.xml files.
  */
 
+import { USE_STATIC_DATA, fetchStaticJson } from './staticData.js';
+
 const BASE_URL = '/api/coverage';
 
 /** Public base URL for coverage pages — used for clickthrough links. */
@@ -95,6 +97,7 @@ export function parseRows(html, baseSection) {
  * @throws {Error} When both fetches fail, or when response HTML cannot be parsed.
  */
 export async function fetchCoverageData() {
+  if (USE_STATIC_DATA) return fetchStaticJson('coverage.json');
   const [coreRes, extRes] = await Promise.all([
     fetch(`${BASE_URL}/cover/`),
     fetch(`${BASE_URL}/cover-extensions/`),

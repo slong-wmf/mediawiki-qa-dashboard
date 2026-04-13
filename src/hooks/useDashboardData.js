@@ -13,6 +13,7 @@ import { fetchRecentBuilds, fetchTrackedJobs } from '../services/jenkins.js';
 import { fetchCoverageData } from '../services/coverage.js';
 import { fetchRecentBugs, fetchTrainBlockers } from '../services/phabricator.js';
 import { fetchMaintainers } from '../services/maintainers.js';
+import { USE_STATIC_DATA, fetchStaticJson } from '../services/staticData.js';
 
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 3_600_000;
 
@@ -146,7 +147,17 @@ export function useDashboardData() {
       setErrors((prev) => ({ ...prev, maintainers: maintainersResult.reason }));
     }
 
-    setLastRefreshed(new Date());
+    // In static mode, show the snapshot generation time rather than "now".
+    if (USE_STATIC_DATA) {
+      try {
+        const meta = await fetchStaticJson('snapshot-meta.json');
+        setLastRefreshed(new Date(meta.generatedAt));
+      } catch {
+        setLastRefreshed(new Date());
+      }
+    } else {
+      setLastRefreshed(new Date());
+    }
     setLoading(false);
     setInitialLoading(false);
   }, []);
@@ -162,18 +173,21 @@ export function useDashboardData() {
     mountedRef.current = true;
     fetchAllRef.current();
 
-    // Only refresh when the tab is actually visible — no point hammering the
-    // Wikimedia APIs while a user has the dashboard open in a background tab.
-    const tick = () => {
-      if (document.visibilityState === 'visible') {
-        fetchAllRef.current();
-      }
-    };
-    const intervalId = setInterval(tick, REFRESH_INTERVAL_MS);
+    // Static data snapshots don't change — skip the polling interval entirely.
+    // In live mode, only refresh when the tab is visible to avoid hammering APIs.
+    let intervalId;
+    if (!USE_STATIC_DATA) {
+      const tick = () => {
+        if (document.visibilityState === 'visible') {
+          fetchAllRef.current();
+        }
+      };
+      intervalId = setInterval(tick, REFRESH_INTERVAL_MS);
+    }
 
     return () => {
       mountedRef.current = false;
-      clearInterval(intervalId);
+      if (intervalId) clearInterval(intervalId);
     };
   }, []); // empty deps — runs once on mount, cleared on unmount
 

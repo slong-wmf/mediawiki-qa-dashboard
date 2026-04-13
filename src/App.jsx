@@ -5,6 +5,7 @@ import CoveragePanel from './components/CoveragePanel.jsx';
 import ExecutionTimePanel from './components/ExecutionTimePanel.jsx';
 import BugsPanel from './components/BugsPanel.jsx';
 import TrainBlockersPanel from './components/TrainBlockersPanel.jsx';
+import { USE_STATIC_DATA } from './services/staticData.js';
 
 /**
  * Format a Date into HH:MM:SS local time.
@@ -63,6 +64,17 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* ── Snapshot notice (GitHub Pages static build only) ── */}
+      {USE_STATIC_DATA && (
+        <div className="bg-amber-900/40 border-b border-amber-700/50 px-6 py-2 text-xs text-amber-300 flex items-center gap-2">
+          <span>⚡</span>
+          <span>
+            <strong>Snapshot data</strong> — generated {lastRefreshed ? lastRefreshed.toLocaleString() : '…'}.
+            {' '}For live data, run the dashboard locally or deploy to Vercel.
+          </span>
+        </div>
+      )}
 
       {/* ── Main panels ── */}
       <main className="flex-1 p-6">

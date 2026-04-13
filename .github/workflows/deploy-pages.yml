@@ -1,0 +1,71 @@
+name: Deploy to GitHub Pages
+
+on:
+  # Deploy whenever code is pushed to main
+  push:
+    branches: [main]
+  # Refresh snapshot data every 6 hours even without a code change
+  schedule:
+    - cron: '0 */6 * * *'
+  # Allow manual runs from the Actions tab
+  workflow_dispatch:
+
+# Required for the deploy-pages action
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only allow one deployment at a time; don't cancel in-progress runs
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mediawiki-dashboard/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mediawiki-dashboard
+        run: npm ci
+
+      - name: Fetch API snapshots
+        working-directory: mediawiki-dashboard
+        run: node scripts/fetch-snapshot-data.js
+        env:
+          # Optional — raises the Phabricator Conduit rate-limit ceiling.
+          # Add this as a repository secret: Settings → Secrets → Actions → PHABRICATOR_TOKEN
+          PHABRICATOR_TOKEN: ${{ secrets.PHABRICATOR_TOKEN }}
+
+      - name: Build (static mode)
+        working-directory: mediawiki-dashboard
+        run: npm run build
+        env:
+          VITE_STATIC_DATA: 'true'
+
+      - name: Copy snapshots into dist
+        working-directory: mediawiki-dashboard
+        run: cp -r snapshot-data dist/data
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: mediawiki-dashboard/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

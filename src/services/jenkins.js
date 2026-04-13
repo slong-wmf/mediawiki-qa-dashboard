@@ -7,6 +7,8 @@
  * No authentication is required — the Jenkins instance is publicly readable.
  */
 
+import { USE_STATIC_DATA, fetchStaticJson } from './staticData.js';
+
 const BASE_URL = '/api/jenkins';
 
 /**
@@ -154,6 +156,7 @@ async function fetchJobBuilds({ label, slug, hasTestReport }) {
  * @throws {Error} When all view requests fail or the combined result is empty.
  */
 export async function fetchTrackedJobs() {
+  if (USE_STATIC_DATA) return fetchStaticJson('jenkins-jobs.json');
   const settled = await Promise.allSettled(
     JENKINS_VIEWS.map((view) =>
       fetch(`${BASE_URL}/view/${encodeURIComponent(view)}/api/json?tree=jobs[name,url]`)
@@ -209,6 +212,7 @@ export async function fetchTrackedJobs() {
  * @throws {Error} Only when every single job fails (total outage).
  */
 export async function fetchRecentBuilds(jobs = DEFAULT_TRACKED_JOBS) {
+  if (USE_STATIC_DATA) return fetchStaticJson('jenkins-builds.json');
   const results = await Promise.allSettled(jobs.map(fetchJobBuilds));
 
   const succeeded = results.filter((r) => r.status === 'fulfilled');

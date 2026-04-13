@@ -9,6 +9,8 @@
  * Source page: https://www.mediawiki.org/wiki/Developers/Maintainers
  */
 
+import { USE_STATIC_DATA, fetchStaticJson } from './staticData.js';
+
 const MAINTAINERS_API_URL =
   'https://www.mediawiki.org/w/api.php' +
   '?action=parse&page=Developers/Maintainers&prop=text&format=json&origin=*';
@@ -26,6 +28,12 @@ const MAINTAINERS_API_URL =
  * @returns {Promise<Map<string, MaintainerEntry>>}
  */
 export async function fetchMaintainers() {
+  if (USE_STATIC_DATA) {
+    // Snapshot is stored as a plain object (JSON can't represent Maps).
+    // Reconstruct as Map<extName, { steward, maintainer }>.
+    const json = await fetchStaticJson('maintainers.json');
+    return new Map(Object.entries(json));
+  }
   const res = await fetch(MAINTAINERS_API_URL);
   if (!res.ok) {
     throw new Error(`Maintainers fetch failed: HTTP ${res.status} ${res.statusText}`);

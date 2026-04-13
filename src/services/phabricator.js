@@ -8,6 +8,8 @@
  * but a token in VITE_PHABRICATOR_TOKEN will raise the rate-limit ceiling.
  */
 
+import { USE_STATIC_DATA, fetchStaticJson } from './staticData.js';
+
 const BASE_URL = '/api/phabricator';
 const TOKEN    = import.meta.env.VITE_PHABRICATOR_TOKEN ?? '';
 
@@ -184,6 +186,7 @@ async function resolveProjectNames(phids) {
 }
 
 export async function fetchRecentBugs() {
+  if (USE_STATIC_DATA) return fetchStaticJson('phabricator-bugs.json');
   const cutoffEpoch = Math.floor(Date.now() / 1000) - LOOKBACK_DAYS * 86400;
   const rawTasks    = []; // collect raw Conduit records before shaping
   let   after       = null;
@@ -331,6 +334,7 @@ function shapeBlockerTask(raw, phidToUser) {
  * }>}
  */
 export async function fetchTrainBlockers() {
+  if (USE_STATIC_DATA) return fetchStaticJson('phabricator-train.json');
   // ── Call A: find the most recently resolved train task ──────────────────
   const trainParams = new URLSearchParams({
     'constraints[projects][0]': TRAIN_DEPLOYMENTS_PHID,

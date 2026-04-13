@@ -62,7 +62,7 @@ describe('useDashboardData', () => {
       expect(result.current.loading).toBe(true);
       expect(result.current.builds).toEqual([]);
       expect(result.current.coverage).toBeNull();
-      expect(result.current.bugs).toEqual([]);
+      expect(result.current.bugs).toBeNull();
       expect(result.current.lastRefreshed).toBeNull();
     });
 
@@ -159,7 +159,7 @@ describe('useDashboardData', () => {
       const { result } = renderHook(() => useDashboardData());
       await waitFor(() => expect(result.current.loading).toBe(false));
       expect(result.current.errors.phabricator).toBe(err);
-      expect(result.current.bugs).toEqual([]);
+      expect(result.current.bugs).toBeNull();
       expect(result.current.builds).toEqual(MOCK_BUILDS);
     });
 

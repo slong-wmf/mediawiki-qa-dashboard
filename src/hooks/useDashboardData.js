@@ -30,7 +30,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
  * @property {Array}           builds           - Jenkins CI build records
  * @property {Array}           jenkinsFailedJobs - Names of jobs whose fetch failed (partial failure)
  * @property {object|null}     coverage         - { core, extensions } from doc.wikimedia.org
- * @property {Array}           bugs             - Phabricator open task records
+ * @property {Object|null}     bugs             - Phabricator open task records ({ tasks, totalFetched, hasMore, cutoffDate })
  * @property {object|null}     trainBlockers    - { trainTask, blockers, totalBlockers } for the previous train
  * @property {Map|null}        maintainers      - Map<extName, {steward,maintainer}>, or null while loading/failed
  * @property {Date|null}       lastRefreshed    - Timestamp of the last completed fetch cycle
@@ -58,7 +58,7 @@ export function useDashboardData() {
   const [builds, setBuilds] = useState([]);
   const [jenkinsFailedJobs, setJenkinsFailedJobs] = useState([]);
   const [coverage, setCoverage] = useState(null);
-  const [bugs, setBugs] = useState([]);
+  const [bugs, setBugs] = useState(null);
   const [trainBlockers, setTrainBlockers] = useState(null);
   const [maintainers, setMaintainers] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(null);

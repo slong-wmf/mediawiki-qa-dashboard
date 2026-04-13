@@ -37,14 +37,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: mediawiki-dashboard/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: mediawiki-dashboard
         run: npm ci
 
       - name: Fetch API snapshots
-        working-directory: mediawiki-dashboard
         run: node scripts/fetch-snapshot-data.js
         env:
           # Optional — raises the Phabricator Conduit rate-limit ceiling.
@@ -52,19 +50,17 @@ jobs:
           PHABRICATOR_TOKEN: ${{ secrets.PHABRICATOR_TOKEN }}
 
       - name: Build (static mode)
-        working-directory: mediawiki-dashboard
         run: npm run build
         env:
           VITE_STATIC_DATA: 'true'
 
       - name: Copy snapshots into dist
-        working-directory: mediawiki-dashboard
         run: cp -r snapshot-data dist/data
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: mediawiki-dashboard/dist
+          path: dist
 
       - name: Deploy to GitHub Pages
         id: deployment

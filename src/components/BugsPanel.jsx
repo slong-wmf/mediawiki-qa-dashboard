@@ -23,28 +23,30 @@ export default function BugsPanel({ bugs, error, loading }) {
 
   // Precompute the filtered + sorted rows so filter toggles don't re-sort
   // an unchanged list on every render.
+  const tasks = Array.isArray(bugs?.tasks) ? bugs.tasks : [];
+
   const sortedTasks = useMemo(() => {
-    if (!bugs) return [];
+    if (!tasks.length) return [];
     const filtered = activeGroup
-      ? bugs.tasks.filter((t) => t.statusGroup === activeGroup)
-      : bugs.tasks;
+      ? tasks.filter((t) => t.statusGroup === activeGroup)
+      : tasks;
     // Sort: highest priority first, then most recently modified
     return [...filtered].sort((a, b) => {
       if (b.priorityValue !== a.priorityValue) return b.priorityValue - a.priorityValue;
       return new Date(b.modifiedAt) - new Date(a.modifiedAt);
     });
-  }, [bugs, activeGroup]);
+  }, [tasks, activeGroup]);
 
   const countByGroup = useMemo(() => {
-    if (!bugs) return {};
+    if (!tasks.length) return {};
     return Object.fromEntries(
-      STATUS_GROUPS.map((g) => [g, bugs.tasks.filter((t) => t.statusGroup === g).length]),
+      STATUS_GROUPS.map((g) => [g, tasks.filter((t) => t.statusGroup === g).length]),
     );
-  }, [bugs]);
+  }, [tasks]);
 
   const newTaskCount = useMemo(
-    () => (bugs ? bugs.tasks.filter((t) => t.isNew).length : 0),
-    [bugs],
+    () => tasks.filter((t) => t.isNew).length,
+    [tasks],
   );
 
   if (loading) return <PanelSkeleton />;
@@ -52,7 +54,7 @@ export default function BugsPanel({ bugs, error, loading }) {
   // (e.g. in component tests). The wrapper in App.jsx also renders its own
   // banner, so this only fires when rendered standalone.
   if (error) return <ErrorBanner source="Phabricator" error={error} />;
-  if (!bugs || bugs.tasks.length === 0) {
+  if (!tasks.length) {
     return (
       <p className="text-gray-500 text-sm italic">
         No open tasks modified in the past 7 days.

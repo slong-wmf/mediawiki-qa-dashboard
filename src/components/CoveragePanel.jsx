@@ -46,9 +46,11 @@ export default function CoveragePanel({
   // on every render when coverage is null.
   const allExtensions = useMemo(() => coverage?.extensions ?? [], [coverage]);
 
+  const isValidMap = maintainers instanceof Map;
+
   const stewardList = useMemo(
-    () => (maintainers ? uniqueStewards(maintainers) : []),
-    [maintainers],
+    () => (isValidMap ? uniqueStewards(maintainers) : []),
+    [isValidMap, maintainers],
   );
 
   const extensions = useMemo(
@@ -57,9 +59,9 @@ export default function CoveragePanel({
   );
 
   const filteredExtensions = useMemo(() => {
-    if (!activeSteward || !maintainers) return extensions;
+    if (!activeSteward || !isValidMap) return extensions;
     return extensions.filter((e) => maintainers.get(e.name)?.steward === activeSteward);
-  }, [extensions, activeSteward, maintainers]);
+  }, [extensions, activeSteward, isValidMap, maintainers]);
 
   const withCoverage = useMemo(
     () => filteredExtensions.filter((e) => e.coverage_pct > 0),

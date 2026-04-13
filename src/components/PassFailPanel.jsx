@@ -27,7 +27,8 @@ const STATUS_MAP = { Passed: 'passed', Failed: 'failed', Other: 'other' };
  *
  * @param {{ builds: Array, error: Error|null, loading: boolean }} props
  */
-export default function PassFailPanel({ builds, error, loading }) {
+export default function PassFailPanel({ builds: rawBuilds, error, loading }) {
+  const builds = Array.isArray(rawBuilds) ? rawBuilds : [];
   const [activeStatus, setActiveStatus] = useState(null);
   const [view,         setView]         = useState('jobs'); // 'jobs' | 'tests'
 
@@ -45,7 +46,7 @@ export default function PassFailPanel({ builds, error, loading }) {
 
   // Test-level aggregates (selenium-daily-beta-* only).
   const { buildsWithTests, testTotals, testPieData } = useMemo(() => {
-    const withTests = builds.filter((b) => b.tests !== null);
+    const withTests = builds.filter((b) => b.tests != null);
     const totals    = withTests.reduce(
       (acc, b) => {
         acc.passed  += b.tests.passed;

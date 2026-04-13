@@ -19,13 +19,15 @@ import { BlockerTable } from './TrainBlockersPanel/BlockerTable.jsx';
 export default function TrainBlockersPanel({ trainBlockers, error, loading }) {
   const [activeStatus, setActiveStatus] = useState(null);
 
+  const blockerList = Array.isArray(trainBlockers?.blockers) ? trainBlockers.blockers : [];
+
   // Sort: unresolved first (by priority desc), then resolved (by close date desc).
   // Memoised so filter toggles don't re-sort an unchanged blocker list.
   const sorted = useMemo(() => {
-    if (!trainBlockers) return [];
+    if (!blockerList.length) return [];
     const filtered = activeStatus
-      ? trainBlockers.blockers.filter((b) => b.statusRaw === activeStatus)
-      : trainBlockers.blockers;
+      ? blockerList.filter((b) => b.statusRaw === activeStatus)
+      : blockerList;
     return [...filtered].sort((a, b) => {
       const aResolved = a.statusRaw === 'resolved';
       const bResolved = b.statusRaw === 'resolved';
@@ -33,21 +35,21 @@ export default function TrainBlockersPanel({ trainBlockers, error, loading }) {
       if (b.priorityValue !== a.priorityValue) return b.priorityValue - a.priorityValue;
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
-  }, [trainBlockers, activeStatus]);
+  }, [blockerList, activeStatus]);
 
   const resolvedCount = useMemo(
-    () => (trainBlockers?.blockers.filter((b) => b.statusRaw === 'resolved').length ?? 0),
-    [trainBlockers],
+    () => blockerList.filter((b) => b.statusRaw === 'resolved').length,
+    [blockerList],
   );
 
   if (loading) return <PanelSkeleton />;
   // Errors/empty data fall through to the empty-state message — the outer
   // Panel wrapper still shows the red banner for the caller.
-  if (error || !trainBlockers) {
+  if (error || !trainBlockers || !trainBlockers.trainTask) {
     return <p className="text-gray-500 text-sm italic">No train blocker data available.</p>;
   }
 
-  const { trainTask, blockers, totalBlockers } = trainBlockers;
+  const { trainTask, totalBlockers = 0 } = trainBlockers;
   const unresolvedCount = totalBlockers - resolvedCount;
 
   return (
@@ -75,7 +77,7 @@ export default function TrainBlockersPanel({ trainBlockers, error, loading }) {
       ) : (
         <>
           <BlockerStatusFilter
-            blockers={blockers}
+            blockers={blockerList}
             activeStatus={activeStatus}
             onChange={setActiveStatus}
           />

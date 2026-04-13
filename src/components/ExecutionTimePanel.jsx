@@ -53,7 +53,8 @@ function CustomTooltip({ active, payload }) {
  *
  * @param {{ builds: Array, error: Error|null, loading: boolean }} props
  */
-export default function ExecutionTimePanel({ builds, error, loading }) {
+export default function ExecutionTimePanel({ builds: rawBuilds, error, loading }) {
+  const builds = Array.isArray(rawBuilds) ? rawBuilds : [];
   const chartData = useMemo(() => {
     const grouped = {};
     for (const build of builds) {

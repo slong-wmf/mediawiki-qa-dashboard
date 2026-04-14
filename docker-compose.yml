@@ -1,0 +1,10 @@
+services:
+  dashboard:
+    build: .
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_PHABRICATOR_TOKEN=${VITE_PHABRICATOR_TOKEN:-}
+    volumes:
+      - .:/app
+      - /app/node_modules

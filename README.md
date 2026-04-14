@@ -62,6 +62,29 @@ Designed to be run locally via `npm run dev`.
 
 ---
 
+## Docker
+
+You can also run the dashboard using Docker.
+
+After cloning the project, just run `docker compose up`.
+
+You can also provide a Phabricator API token either by editing the `.env` file, or by providing it via the CLI:
+
+```bash
+VITE_PHABRICATOR_TOKEN=api-xxxxx docker compose up
+```
+
+To rebuild the image after dependency changes (e.g. after `git pull` updates
+`package-lock.json` or changing the `.env` file):
+
+```bash
+docker compose up --build
+```
+
+> Please note that local edits trigger hot-reload automatically.
+
+---
+
 ## Environment Variables
 
 | Variable | Description | Required |

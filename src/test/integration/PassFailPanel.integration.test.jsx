@@ -120,7 +120,7 @@ describe('PassFailPanel – integration contract tests', () => {
 
       render(<PassFailPanel builds={builds} error={null} loading={false} />);
 
-      const toggle = screen.getByRole('button', { name: /Failed jobs/ });
+      const toggle = screen.getByRole('button', { name: /Failed builds/ });
       expect(toggle).toHaveTextContent('2');
       fireEvent.click(toggle);
 
@@ -130,7 +130,7 @@ describe('PassFailPanel – integration contract tests', () => {
       // assertion to the drill-down card heading.
       const { within } = await import('@testing-library/react');
       expect(within(details).getByRole('heading', { name: 'quibble-php83' })).toBeInTheDocument();
-      expect(within(details).getByText('2 failures / 24h')).toBeInTheDocument();
+      expect(within(details).getByText('2 failures / past week')).toBeInTheDocument();
       expect(await screen.findByText(/MOCK_CONSOLE_TAIL_LINE/)).toBeInTheDocument();
 
       // Links to the most recent failed build (build 9, the 30-min-old one).

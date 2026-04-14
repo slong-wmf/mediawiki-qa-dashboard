@@ -74,6 +74,11 @@ App (owns all state via useDashboardData)
 │   │   └── PassFailPanel
 │   │       ├── Tab toggle: "Job results" vs "Test results"
 │   │       ├── Recharts PieChart (passed / failed / other)
+│   │       ├── Failed-jobs drill-down toggle → FailedJobsDetails
+│   │       │     ├── One card per failed job (past 24h)
+│   │       │     ├── Hourly failure breakdown (24 hour-slot strip)
+│   │       │     ├── Link to most recent failed build
+│   │       │     └── Lazy-loaded Jenkins consoleText tail
 │   │       └── <table> (10 most recent builds, clickable rows → Jenkins)
 │   ├── Panel
 │   │   └── CoveragePanel
@@ -124,3 +129,21 @@ For production deployments, replace the Vite proxy with a server-side reverse pr
 (e.g. Nginx, a Cloudflare Worker, or a Node.js edge function) that forwards requests
 to the upstream services. No API secrets need to be injected server-side for Jenkins
 or coverage — only the optional Phabricator token.
+
+---
+
+## Lazy-loaded Failed Jobs drill-down
+
+`FailedJobsDetails` (inside the Pass/Fail Rates panel) surfaces per-job detail for
+builds that failed in the last 24 hours. Data flow:
+
+1. The panel filters the existing `builds[]` array for `status === 'failed'` within
+   the 24h window and groups by `job`. No new top-level fetch is triggered.
+2. For each group's most recent failed build, the card lazy-calls
+   `fetchBuildConsoleTail(build_url)` from `src/services/jenkins.js`, which hits
+   `/api/jenkins/job/<slug>/<n>/consoleText` via the proxy and returns the last ~40
+   non-empty lines.
+3. Results are cached at module scope keyed by `build_url`, so toggling the drill-down
+   closed and open again does not re-fetch.
+4. In static snapshot mode (`VITE_STATIC_DATA=true`), `fetchBuildConsoleTail` returns
+   `null` without calling `fetch`; the UI renders a link back to Jenkins instead.

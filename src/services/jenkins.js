@@ -245,3 +245,47 @@ export async function fetchRecentBuilds(jobs = DEFAULT_TRACKED_JOBS) {
 
   return { builds, failedJobs };
 }
+
+/**
+ * Fetch the tail of a build's Jenkins console log. Used by the Failed Jobs
+ * drill-down to surface a short error-message excerpt next to each failed job
+ * without sending the user off to Jenkins.
+ *
+ * Accepts the absolute Jenkins `build_url` exposed on each build record
+ * (e.g. `https://integration.wikimedia.org/ci/job/<slug>/<n>/`) and rewrites
+ * it onto the local `/api/jenkins` proxy path so CORS is not a problem in dev
+ * or on Vercel. Returns only the last `lines` non-empty lines because console
+ * output can be many MB and only the tail is useful for diagnosing the failure.
+ *
+ * Returns `null` in static snapshot mode (VITE_STATIC_DATA=true) — live console
+ * logs are not captured in the snapshot, so the caller should render a
+ * graceful fallback (e.g. "Error log not available in snapshot mode").
+ *
+ * @param {string} buildUrl      Absolute Jenkins build URL (from build.build_url).
+ * @param {object} [options]
+ * @param {number} [options.lines=40]   Max tail lines to return.
+ * @returns {Promise<string|null>}      Joined tail text, or null in static mode.
+ * @throws {Error}                      When the Jenkins request fails.
+ */
+export async function fetchBuildConsoleTail(buildUrl, { lines = 40 } = {}) {
+  if (USE_STATIC_DATA) return null;
+  if (!buildUrl || typeof buildUrl !== 'string') {
+    throw new Error('fetchBuildConsoleTail: buildUrl is required');
+  }
+
+  // Rewrite an absolute integration.wikimedia.org/ci URL onto the proxy path,
+  // and tolerate a URL that is already proxy-relative.
+  const path = buildUrl
+    .replace(/^https?:\/\/integration\.wikimedia\.org\/ci/, '')
+    .replace(/^\/api\/jenkins/, '');
+  const url = `${BASE_URL}${path.endsWith('/') ? path : path + '/'}consoleText`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Jenkins consoleText returned ${res.status} ${res.statusText}`);
+  }
+
+  const text = await res.text();
+  const nonEmpty = text.split('\n').map((l) => l.trimEnd()).filter((l) => l.length > 0);
+  return nonEmpty.slice(-lines).join('\n');
+}

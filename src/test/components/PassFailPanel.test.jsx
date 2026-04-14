@@ -1,6 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import PassFailPanel from '../../components/PassFailPanel.jsx';
+
+vi.mock('../../services/jenkins.js', async (orig) => {
+  const actual = await orig();
+  return {
+    ...actual,
+    fetchBuildConsoleTail: vi.fn().mockResolvedValue('mock console tail'),
+  };
+});
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }) => <div>{children}</div>,
@@ -103,6 +111,43 @@ describe('PassFailPanel', () => {
       render(<PassFailPanel builds={noTestBuilds} loading={false} error={null} />);
       fireEvent.click(screen.getByText('Test results'));
       expect(screen.getByText(/No test-report data/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('failed-jobs drill-down', () => {
+    it('renders the "Failed jobs" toggle button with the 24h failure count', () => {
+      render(<PassFailPanel builds={BUILDS} loading={false} error={null} />);
+      // BUILDS contains 1 failed build within the last 24h.
+      const btn = screen.getByRole('button', { name: /Failed jobs/ });
+      expect(btn).toBeInTheDocument();
+      expect(btn).toHaveTextContent('1');
+      expect(btn).not.toBeDisabled();
+    });
+
+    it('disables the toggle when there are no failed builds in the last 24h', () => {
+      const allPassed = BUILDS.map((b) => ({ ...b, status: 'passed' }));
+      render(<PassFailPanel builds={allPassed} loading={false} error={null} />);
+      const btn = screen.getByRole('button', { name: /Failed jobs/ });
+      expect(btn).toBeDisabled();
+      expect(btn).toHaveTextContent('0');
+    });
+
+    it('toggles FailedJobsDetails into and out of the DOM', async () => {
+      render(<PassFailPanel builds={BUILDS} loading={false} error={null} />);
+      const btn = screen.getByRole('button', { name: /Failed jobs/ });
+      expect(screen.queryByTestId('failed-jobs-details')).toBeNull();
+      fireEvent.click(btn);
+      expect(screen.getByTestId('failed-jobs-details')).toBeInTheDocument();
+      fireEvent.click(btn);
+      expect(screen.queryByTestId('failed-jobs-details')).toBeNull();
+      // Let any in-flight console-tail fetch settle.
+      await waitFor(() => {});
+    });
+
+    it('hides the toggle in Test results view', () => {
+      render(<PassFailPanel builds={BUILDS} loading={false} error={null} />);
+      fireEvent.click(screen.getByText('Test results'));
+      expect(screen.queryByRole('button', { name: /Failed jobs/ })).toBeNull();
     });
   });
 });

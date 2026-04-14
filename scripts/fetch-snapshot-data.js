@@ -460,7 +460,7 @@ async function fetchMaintainers() {
 async function main() {
   console.log('🚀 Fetching snapshot data for GitHub Pages build...');
   console.log(`   Output: ${OUT_DIR}/`);
-  if (PHAB_TOKEN) console.log('   Phabricator token: provided');
+  if (PHAB_TOKEN) console.log(`   Phabricator token: provided (length=${PHAB_TOKEN.length})`);
   else             console.log('   Phabricator token: not set (using anonymous rate limit)');
 
   const errors = [];

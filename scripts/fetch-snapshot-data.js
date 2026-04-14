@@ -140,14 +140,42 @@ async function conduit(method, params) {
   if (PHAB_TOKEN) params.set('api.token', PHAB_TOKEN);
   params.set('__conduit__', '1');
 
-  const res = await fetchWithRetry(`${PHAB_BASE}/${method}`, {
+  const url = `${PHAB_BASE}/${method}`;
+  const requestHeaders = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'User-Agent':   USER_AGENT,
+  };
+  const body = params.toString();
+
+  // Redact the token in logs but keep length/prefix so we can verify shape.
+  const redactedBody = body.replace(
+    /(api\.token=)([^&]+)/,
+    (_, k, v) => `${k}<redacted len=${v.length} prefix=${v.slice(0, 4)}>`,
+  );
+
+  console.log(`\n  → POST ${url}`);
+  console.log(`    request headers: ${JSON.stringify(requestHeaders)}`);
+  console.log(`    request body:    ${redactedBody}`);
+
+  const res = await fetchWithRetry(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString(),
+    headers: requestHeaders,
+    body,
   });
 
+  const responseHeaders = Object.fromEntries(res.headers.entries());
+  const responseText    = await res.text();
+
+  console.log(`    ← HTTP ${res.status} ${res.statusText}`);
+  console.log(`    response headers: ${JSON.stringify(responseHeaders)}`);
+  console.log(`    response body (first 1000 chars): ${responseText.slice(0, 1000)}`);
+
   if (!res.ok) throw new Error(`Phabricator ${method} HTTP ${res.status}`);
-  const json = await res.json();
+
+  let json;
+  try { json = JSON.parse(responseText); }
+  catch (err) { throw new Error(`Phabricator ${method} returned non-JSON body: ${err.message}`); }
+
   if (json.error_code) throw new Error(`Conduit error [${json.error_code}]: ${json.error_info}`);
   if (!json.result)    throw new Error(`Phabricator ${method} returned no result`);
   return json.result;

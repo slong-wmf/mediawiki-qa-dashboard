@@ -2,11 +2,15 @@
  * Amber call-out shown when a steward filter surfaces extensions with no
  * coverage data — links out to MediaWiki docs on adding coverage.
  */
-export function NoCoverageNote({ stewardName }) {
+export function NoCoverageNote({ stewardNames }) {
+  const label = stewardNames.length === 1
+    ? <span className="text-white">{stewardNames[0]}</span>
+    : <span className="text-white">{stewardNames.join(', ')}</span>;
+
   return (
     <div className="rounded border border-amber-700/60 bg-amber-900/20 px-3 py-2 text-xs text-amber-300 leading-snug space-y-1">
       <p className="font-medium">
-        Some extensions owned by <span className="text-white">{stewardName}</span> have no coverage data (0%).
+        Some extensions owned by {label} have no coverage data (0%).
       </p>
       <p className="text-amber-400/80">
         To add test coverage, see the MediaWiki documentation:

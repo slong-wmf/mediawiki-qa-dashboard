@@ -43,7 +43,7 @@ export function BuildsTable({ builds, view }) {
                 <td className="py-1.5 pr-3 text-gray-300 max-w-[120px]">
                   <a
                     href={view === 'tests'
-                      ? `${build.job_url}lastCompletedBuild/testReport/`
+                      ? `${build.build_url}testReport/`
                       : build.job_url}
                     target="_blank"
                     rel="noopener noreferrer"

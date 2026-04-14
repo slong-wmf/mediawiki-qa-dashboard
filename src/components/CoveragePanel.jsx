@@ -39,7 +39,7 @@ export default function CoveragePanel({
   const [activeBucket,  setActiveBucket]  = useState(null);
   const [chartView,     setChartView]     = useState('table'); // 'top' | 'lowest' | 'table'
   const [wikiOnly,      setWikiOnly]      = useState(true);
-  const [activeSteward, setActiveSteward] = useState(null);
+  const [activeStewards, setActiveStewards] = useState([]);
 
   // Hooks must run unconditionally before any early returns. Wrapped in
   // useMemo so the fallback `[]` does not churn downstream memo dependencies
@@ -59,9 +59,9 @@ export default function CoveragePanel({
   );
 
   const filteredExtensions = useMemo(() => {
-    if (!activeSteward || !isValidMap) return extensions;
-    return extensions.filter((e) => maintainers.get(e.name)?.steward === activeSteward);
-  }, [extensions, activeSteward, isValidMap, maintainers]);
+    if (!activeStewards.length || !isValidMap) return extensions;
+    return extensions.filter((e) => activeStewards.includes(maintainers.get(e.name)?.steward));
+  }, [extensions, activeStewards, isValidMap, maintainers]);
 
   const withCoverage = useMemo(
     () => filteredExtensions.filter((e) => e.coverage_pct > 0),
@@ -109,11 +109,11 @@ export default function CoveragePanel({
   const handleWikiOnlyChange = useCallback((next) => {
     setWikiOnly(next);
     setActiveBucket(null);
-    setActiveSteward(null);
+    setActiveStewards([]);
   }, []);
 
   const handleStewardChange = useCallback((next) => {
-    setActiveSteward(next);
+    setActiveStewards(next);
     setActiveBucket(null);
   }, []);
 
@@ -125,7 +125,7 @@ export default function CoveragePanel({
 
   const total = filteredExtensions.length;
   const hasZeroCoverageForSteward =
-    activeSteward && filteredExtensions.some((e) => e.coverage_pct === 0);
+    activeStewards.length > 0 && filteredExtensions.some((e) => e.coverage_pct === 0);
 
   return (
     <div className="space-y-4">
@@ -141,7 +141,7 @@ export default function CoveragePanel({
         maintainers={maintainers}
         maintainersError={maintainersError}
         stewardList={stewardList}
-        activeSteward={activeSteward}
+        activeStewards={activeStewards}
         onChange={handleStewardChange}
       />
 
@@ -149,10 +149,10 @@ export default function CoveragePanel({
         median={medianCoverage}
         coveredCount={withCoverage.length}
         wikiOnly={wikiOnly}
-        activeSteward={activeSteward}
+        activeStewards={activeStewards}
       />
 
-      {hasZeroCoverageForSteward && <NoCoverageNote stewardName={activeSteward} />}
+      {hasZeroCoverageForSteward && <NoCoverageNote stewardNames={activeStewards} />}
 
       {activeBucket === null && (
         <div>

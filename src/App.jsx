@@ -54,14 +54,16 @@ export default function App() {
             Last refreshed:{' '}
             <span className="text-gray-200 font-mono">{formatTime(lastRefreshed)}</span>
           </span>
-          <button
-            onClick={refresh}
-            disabled={loading}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50
-                       text-white text-sm rounded transition-colors"
-          >
-            {loading ? 'Refreshing…' : 'Refresh'}
-          </button>
+          {!USE_STATIC_DATA && (
+            <button
+              onClick={refresh}
+              disabled={loading}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50
+                         text-white text-sm rounded transition-colors"
+            >
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          )}
         </div>
       </header>
 
@@ -71,7 +73,7 @@ export default function App() {
           <span>⚡</span>
           <span>
             <strong>Snapshot data</strong> — generated {lastRefreshed ? lastRefreshed.toLocaleString() : '…'}.
-            {' '}For live data, run the dashboard locally or deploy to Vercel.
+            {' '}For live data, run the dashboard locally.
           </span>
         </div>
       )}

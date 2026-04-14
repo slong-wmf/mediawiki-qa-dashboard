@@ -146,20 +146,10 @@ async function conduit(method, params) {
     body: params.toString(),
   });
 
-  const responseText = await res.text();
-
-  if (!res.ok) {
-    throw new Error(`Phabricator ${method} HTTP ${res.status} ${res.statusText} — body: ${responseText}`);
-  }
-
-  let json;
-  try { json = JSON.parse(responseText); }
-  catch (err) {
-    throw new Error(`Phabricator ${method} returned non-JSON body: ${err.message} — body: ${responseText}`);
-  }
-
+  if (!res.ok) throw new Error(`Phabricator ${method} HTTP ${res.status}`);
+  const json = await res.json();
   if (json.error_code) throw new Error(`Conduit error [${json.error_code}]: ${json.error_info}`);
-  if (!json.result)    throw new Error(`Phabricator ${method} returned no result — body: ${responseText}`);
+  if (!json.result)    throw new Error(`Phabricator ${method} returned no result`);
   return json.result;
 }
 
@@ -476,7 +466,7 @@ async function fetchMaintainers() {
 async function main() {
   console.log('🚀 Fetching snapshot data for GitHub Pages build...');
   console.log(`   Output: ${OUT_DIR}/`);
-  if (PHAB_TOKEN) console.log(`   Phabricator token: provided (length=${PHAB_TOKEN.length})`);
+  if (PHAB_TOKEN) console.log('   Phabricator token: provided');
   else             console.log('   Phabricator token: not set (using anonymous rate limit)');
 
   const errors = [];

@@ -38,10 +38,16 @@ mkdirSync(OUT_DIR, { recursive: true });
  * @param {number} [maxRetries=4]
  * @returns {Promise<Response>}
  */
+const USER_AGENT = 'mediawiki-qa-dashboard/1.0 (GitHub Actions snapshot fetcher)';
+
 async function fetchWithRetry(url, options = {}, maxRetries = 4) {
+  const mergedOptions = {
+    ...options,
+    headers: { 'User-Agent': USER_AGENT, ...(options.headers ?? {}) },
+  };
   let delay = 10_000; // ms — initial back-off
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, options);
+    const res = await fetch(url, mergedOptions);
     if (res.status !== 429) return res;
 
     if (attempt === maxRetries) return res; // let caller handle the 429

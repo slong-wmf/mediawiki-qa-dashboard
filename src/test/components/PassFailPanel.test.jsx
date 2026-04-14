@@ -112,6 +112,17 @@ describe('PassFailPanel', () => {
       fireEvent.click(screen.getByText('Test results'));
       expect(screen.getByText(/No test-report data/i)).toBeInTheDocument();
     });
+
+    it('links each Test results row to the specific build\'s test report, not the latest', () => {
+      render(<PassFailPanel builds={BUILDS} loading={false} error={null} />);
+      fireEvent.click(screen.getByText('Test results'));
+      const link = screen.getByRole('link', { name: 'selenium-daily-beta-Echo' });
+      expect(link).toHaveAttribute(
+        'href',
+        'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/1/testReport/',
+      );
+      expect(link.getAttribute('href')).not.toContain('lastCompletedBuild');
+    });
   });
 
   describe('failed-jobs drill-down', () => {

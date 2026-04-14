@@ -26,6 +26,35 @@ import { parseHTML } from 'linkedom';
 const OUT_DIR = './snapshot-data';
 mkdirSync(OUT_DIR, { recursive: true });
 
+// ── Retry helper ──────────────────────────────────────────────────────────────
+
+/**
+ * Fetch with automatic retry on HTTP 429 (rate limit) responses.
+ * Respects the Retry-After header when present; otherwise uses exponential
+ * back-off starting at 10 s and doubling up to a 120 s cap.
+ *
+ * @param {string} url
+ * @param {RequestInit} [options]
+ * @param {number} [maxRetries=4]
+ * @returns {Promise<Response>}
+ */
+async function fetchWithRetry(url, options = {}, maxRetries = 4) {
+  let delay = 10_000; // ms — initial back-off
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options);
+    if (res.status !== 429) return res;
+
+    if (attempt === maxRetries) return res; // let caller handle the 429
+
+    // Honour Retry-After if the server provides it (value is seconds)
+    const retryAfter = res.headers.get('Retry-After');
+    const wait = retryAfter ? parseInt(retryAfter, 10) * 1_000 : delay;
+    console.warn(`  ⏳ 429 from ${new URL(url).hostname} — waiting ${Math.round(wait / 1000)}s before retry ${attempt + 1}/${maxRetries}…`);
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    delay = Math.min(delay * 2, 120_000);
+  }
+}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const JENKINS_BASE    = 'https://integration.wikimedia.org/ci';
@@ -105,7 +134,7 @@ async function conduit(method, params) {
   if (PHAB_TOKEN) params.set('api.token', PHAB_TOKEN);
   params.set('__conduit__', '1');
 
-  const res = await fetch(`${PHAB_BASE}/${method}`, {
+  const res = await fetchWithRetry(`${PHAB_BASE}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
@@ -125,7 +154,7 @@ async function fetchJenkinsJobs() {
 
   const settled = await Promise.allSettled(
     JENKINS_VIEWS.map((view) =>
-      fetch(`${JENKINS_BASE}/view/${encodeURIComponent(view)}/api/json?tree=jobs[name,url]`)
+      fetchWithRetry(`${JENKINS_BASE}/view/${encodeURIComponent(view)}/api/json?tree=jobs[name,url]`)
         .then((r) => {
           if (!r.ok) throw new Error(`View "${view}": ${r.status} ${r.statusText}`);
           return r.json();
@@ -166,7 +195,7 @@ async function fetchJenkinsBuilds(jobs) {
   const results = await Promise.allSettled(
     jobs.map(async ({ label, slug, hasTestReport }) => {
       const url = `${JENKINS_BASE}/job/${encodeURIComponent(slug)}/api/json?tree=${encodeURIComponent(tree)}`;
-      const res = await fetch(url);
+      const res = await fetchWithRetry(url);
       if (!res.ok) throw new Error(`Jenkins job "${label}" returned ${res.status} ${res.statusText}`);
       const data = await res.json();
       if (!Array.isArray(data.builds)) throw new Error(`Jenkins job "${label}" returned unexpected shape`);
@@ -230,8 +259,8 @@ function parseCoverageHTML(html, baseSection) {
 async function fetchCoverage() {
   console.log('\n📦 Coverage: fetching from doc.wikimedia.org...');
   const [coreRes, extRes] = await Promise.all([
-    fetch('https://doc.wikimedia.org/cover/'),
-    fetch('https://doc.wikimedia.org/cover-extensions/'),
+    fetchWithRetry('https://doc.wikimedia.org/cover/'),
+    fetchWithRetry('https://doc.wikimedia.org/cover-extensions/'),
   ]);
 
   if (!coreRes.ok) throw new Error(`Coverage core: ${coreRes.status} ${coreRes.statusText}`);
@@ -430,7 +459,7 @@ async function fetchTrainBlockers() {
 async function fetchMaintainers() {
   console.log('\n📦 Maintainers: fetching from mediawiki.org...');
   const url = 'https://www.mediawiki.org/w/api.php?action=parse&page=Developers/Maintainers&prop=text&format=json&origin=*';
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) throw new Error(`Maintainers fetch failed: ${res.status} ${res.statusText}`);
 
   const json = await res.json();

@@ -4,6 +4,7 @@ import {
   extractTestCounts,
   fetchRecentBuilds,
   fetchTrackedJobs,
+  fetchBuildConsoleTail,
 } from '../../services/jenkins.js';
 
 // ── normaliseStatus ───────────────────────────────────────────────────────────
@@ -424,5 +425,70 @@ describe('fetchTrackedJobs', () => {
 
       await expect(fetchTrackedJobs()).rejects.toThrow(/No jobs found/);
     });
+  });
+});
+
+// ── fetchBuildConsoleTail ────────────────────────────────────────────────────
+
+describe('fetchBuildConsoleTail', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('rewrites an absolute Jenkins build URL onto the /api/jenkins proxy path', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => 'line 1\nline 2',
+    });
+    await fetchBuildConsoleTail(
+      'https://integration.wikimedia.org/ci/job/some-job/5/',
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch.mock.calls[0][0]).toBe('/api/jenkins/job/some-job/5/consoleText');
+  });
+
+  it('returns the last N non-empty lines joined by newlines', async () => {
+    const text = ['a', '', 'b', 'c', '', 'd'].join('\n');
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => text,
+    });
+    const tail = await fetchBuildConsoleTail(
+      'https://integration.wikimedia.org/ci/job/j/1/',
+      { lines: 2 },
+    );
+    expect(tail).toBe('c\nd');
+  });
+
+  it('throws on a non-OK HTTP status with a descriptive message', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+    });
+    await expect(
+      fetchBuildConsoleTail('https://integration.wikimedia.org/ci/job/j/1/'),
+    ).rejects.toThrow(/404 Not Found/);
+  });
+
+  it('throws when buildUrl is missing', async () => {
+    await expect(fetchBuildConsoleTail('')).rejects.toThrow(/buildUrl is required/);
+  });
+
+  it('returns null in static-data mode without calling fetch', async () => {
+    vi.resetModules();
+    vi.doMock('../../services/staticData.js', () => ({
+      USE_STATIC_DATA: true,
+      fetchStaticJson: vi.fn(),
+    }));
+    const mod = await import('../../services/jenkins.js');
+    global.fetch = vi.fn();
+    const out = await mod.fetchBuildConsoleTail(
+      'https://integration.wikimedia.org/ci/job/j/1/',
+    );
+    expect(out).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+    vi.doUnmock('../../services/staticData.js');
   });
 });

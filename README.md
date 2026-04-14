@@ -6,6 +6,12 @@ from three sources — [Wikimedia Jenkins CI](https://integration.wikimedia.org/
 [Phabricator Maniphest](https://phabricator.wikimedia.org/maniphest/) — and displays
 them in real-time panels with automatic polling and manual refresh.
 
+The **Pass / Fail Rates** panel includes a *Failed jobs* drill-down: click the button
+below the pie chart to expand a per-job breakdown of failures in the past 24 hours —
+failure count, hour-by-hour distribution, a direct link to the most recent failed
+build, and a tail of that build's Jenkins console log. The console tail is lazy-fetched
+from Jenkins on expand and is not available in the static (snapshot) build.
+
 ---
 
 - Authored via Claude Code with prompting.
@@ -93,7 +99,8 @@ All test files live under `src/test/`.
 | Coverage service | `src/test/services/coverage.test.js` | `parseRows` (valid HTML, missing elements, edge cases), `fetchCoverageData` (success, HTTP errors, empty page) |
 | Phabricator service | `src/test/services/phabricator.test.js` | `statusGroup`, `mapPriority`, `isSuspectedBug` (all keywords + partial-word avoidance), `shapeTask`, `fetchRecentBugs` (pagination, MAX_PAGES cap, Conduit error codes) |
 | Data hook | `src/test/hooks/useDashboardData.test.js` | Initial state, per-source error isolation, error recovery on refresh, manual refresh, auto-refresh interval |
-| PassFailPanel | `src/test/components/PassFailPanel.test.jsx` | Loading, error, empty, and data states; Job/Test view toggle |
+| PassFailPanel | `src/test/components/PassFailPanel.test.jsx` | Loading, error, empty, and data states; Job/Test view toggle; Failed jobs drill-down toggle |
+| FailedJobsDetails | `src/test/components/FailedJobsDetails.test.jsx` | 24h grouping, hourly breakdown, console-tail lazy-load (success / error / static-mode) |
 | CoveragePanel | `src/test/components/CoveragePanel.test.jsx` | Loading, error, null, and data states; Wikipedia filter toggle; null core |
 | ExecutionTimePanel | `src/test/components/ExecutionTimePanel.test.jsx` | Loading, error, empty, and data states; slow-job colour legend |
 | BugsPanel | `src/test/components/BugsPanel.test.jsx` | Loading, error, empty, and data states; priority sort; suspected-bug filter; status card filter; hasMore indicator |
@@ -117,6 +124,9 @@ file so a failure tells you exactly which file and URL is broken.
   Coverage panel will silently return empty or incomplete data.
 - **Phabricator bug detection** scans task *titles only* for bug-signal keywords. Tasks
   where the bug is described in a comment but not the title will not be flagged.
+- **Failed-jobs console logs** are fetched live from Jenkins on expand. In the static
+  (snapshot) build mode (`VITE_STATIC_DATA=true`) they are not available, and the
+  drill-down falls back to an "open build in Jenkins" link instead.
 - The Tailwind CSS CDN script ([cdn.tailwindcss.com](https://cdn.tailwindcss.com)) is used for development
   convenience. For production, replace it with the PostCSS plugin and a proper build step.
 - The Vite proxy (`vite.config.js`) handles CORS for [Phabricator](https://phabricator.wikimedia.org), [Jenkins](https://integration.wikimedia.org/ci), and the

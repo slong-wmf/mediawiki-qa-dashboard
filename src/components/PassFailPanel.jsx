@@ -3,6 +3,9 @@ import { ErrorBanner } from './shared/ErrorBanner.jsx';
 import { ViewToggle } from './PassFailPanel/ViewToggle.jsx';
 import { PassFailPie } from './PassFailPanel/PassFailPie.jsx';
 import { BuildsTable } from './PassFailPanel/BuildsTable.jsx';
+import FailedJobsDetails from './PassFailPanel/FailedJobsDetails.jsx';
+
+const MS_24H = 24 * 60 * 60 * 1000;
 
 /** Skeleton loader for the panel. */
 function Skeleton() {
@@ -29,8 +32,17 @@ const STATUS_MAP = { Passed: 'passed', Failed: 'failed', Other: 'other' };
  */
 export default function PassFailPanel({ builds: rawBuilds, error, loading }) {
   const builds = Array.isArray(rawBuilds) ? rawBuilds : [];
-  const [activeStatus, setActiveStatus] = useState(null);
-  const [view,         setView]         = useState('jobs'); // 'jobs' | 'tests'
+  const [activeStatus,      setActiveStatus]      = useState(null);
+  const [view,              setView]              = useState('jobs'); // 'jobs' | 'tests'
+  const [showFailedDetails, setShowFailedDetails] = useState(false);
+
+  // Count of failed builds in the past 24h — drives the "Failed jobs" button.
+  const failedLast24hCount = useMemo(() => {
+    const cutoff = Date.now() - MS_24H;
+    return builds.filter(
+      (b) => b?.status === 'failed' && b?.timestamp && new Date(b.timestamp).getTime() >= cutoff,
+    ).length;
+  }, [builds]);
 
   // Job-level pie data — one slice per status.
   const jobPieData = useMemo(() => {
@@ -139,6 +151,33 @@ export default function PassFailPanel({ builds: rawBuilds, error, loading }) {
             activeStatus={activeStatus}
             onSliceClick={handleSliceClick}
           />
+
+          {view === 'jobs' && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowFailedDetails((v) => !v)}
+                disabled={failedLast24hCount === 0}
+                aria-expanded={showFailedDetails}
+                aria-controls="failed-jobs-details"
+                className="w-full text-left px-3 py-1.5 text-xs rounded
+                           bg-gray-700 hover:bg-gray-600 disabled:opacity-50
+                           disabled:cursor-not-allowed text-gray-200
+                           transition-colors flex items-center justify-between"
+              >
+                <span>
+                  <span className="mr-1">{showFailedDetails ? '▾' : '▸'}</span>
+                  Failed jobs · <span className="font-mono">{failedLast24hCount}</span>
+                </span>
+                <span className="text-gray-400">past 24h</span>
+              </button>
+              {showFailedDetails && (
+                <div id="failed-jobs-details">
+                  <FailedJobsDetails builds={builds} />
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 

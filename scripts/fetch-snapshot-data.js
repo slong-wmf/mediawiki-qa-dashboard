@@ -149,89 +149,50 @@ async function conduit(method, params) {
 
 // ── Jenkins ───────────────────────────────────────────────────────────────────
 
-async function fetchJenkinsJobs() {
-  console.log('\n📦 Jenkins: fetching job list from views...');
-
-  const settled = await Promise.allSettled(
-    JENKINS_VIEWS.map((view) =>
-      fetchWithRetry(`${JENKINS_BASE}/view/${encodeURIComponent(view)}/api/json?tree=jobs[name,url]`)
-        .then((r) => {
-          if (!r.ok) throw new Error(`View "${view}": ${r.status} ${r.statusText}`);
-          return r.json();
-        })
-        .then((data) => (Array.isArray(data.jobs) ? data.jobs : [])),
-    ),
-  );
-
-  const jobs = [];
-  const seen = new Set();
-  for (const result of settled) {
-    if (result.status === 'rejected') {
-      console.warn(`  ⚠ View fetch failed: ${result.reason?.message}`);
-      continue;
-    }
-    for (const job of result.value) {
-      if (!job.name || seen.has(job.name)) continue;
-      seen.add(job.name);
-      jobs.push({
-        label: job.name,
-        slug:  job.name,
-        hasTestReport: job.name.startsWith('selenium-daily-beta-'),
-      });
-    }
-  }
-
-  if (!jobs.length) throw new Error('No jobs returned from any Jenkins view');
-  console.log(`  Found ${jobs.length} jobs`);
-  return jobs;
-}
-
-async function fetchJenkinsBuilds(jobs) {
-  console.log(`\n📦 Jenkins: fetching builds for ${jobs.length} jobs...`);
+async function fetchJenkinsData() {
+  console.log('\n📦 Jenkins: fetching jobs and builds from views...');
 
   const actionFields = 'actions[_class,totalCount,failCount,skipCount]';
-  const tree = `builds[number,result,duration,timestamp,url,${actionFields}]{0,${BUILDS_PER_JOB}}`;
+  const buildFields  = `builds[number,result,duration,timestamp,url,${actionFields}]{0,${BUILDS_PER_JOB}}`;
+  const tree = `views[name,jobs[name,url,${buildFields}]]`;
+  const url  = `${JENKINS_BASE}/api/json?tree=${encodeURIComponent(tree)}`;
 
-  const results = await Promise.allSettled(
-    jobs.map(async ({ label, slug, hasTestReport }) => {
-      const url = `${JENKINS_BASE}/job/${encodeURIComponent(slug)}/api/json?tree=${encodeURIComponent(tree)}`;
-      const res = await fetchWithRetry(url);
-      if (!res.ok) throw new Error(`Jenkins job "${label}" returned ${res.status} ${res.statusText}`);
-      const data = await res.json();
-      if (!Array.isArray(data.builds)) throw new Error(`Jenkins job "${label}" returned unexpected shape`);
+  const res = await fetchWithRetry(url);
+  if (!res.ok) throw new Error(`Jenkins: ${res.status} ${res.statusText}`);
+  const data = await res.json();
 
-      const jobUrl = `${JENKINS_BASE}/job/${slug}/`;
-      return data.builds
-        .filter((b) => b.result !== null)
-        .map((b) => ({
-          job:              label,
+  const wanted = new Set(JENKINS_VIEWS);
+  const jobs   = [];
+  const builds = [];
+  const seen   = new Set();
+
+  for (const view of data.views ?? []) {
+    if (!wanted.has(view.name)) continue;
+    for (const job of view.jobs ?? []) {
+      if (!job.name || seen.has(job.name)) continue;
+      seen.add(job.name);
+      const hasTestReport = job.name.startsWith('selenium-daily-beta-');
+      jobs.push({ label: job.name, slug: job.name, hasTestReport });
+
+      const jobUrl = `${JENKINS_BASE}/job/${job.name}/`;
+      for (const b of job.builds ?? []) {
+        if (b.result == null) continue;
+        builds.push({
+          job:              job.name,
           job_url:          jobUrl,
           build_url:        b.url ?? jobUrl,
           status:           normaliseStatus(b.result),
           duration_seconds: b.duration > 0 ? Math.round(b.duration / 1000) : 0,
           timestamp:        new Date(b.timestamp).toISOString(),
           tests:            hasTestReport ? extractTestCounts(b.actions) : null,
-        }));
-    }),
-  );
-
-  const builds    = [];
-  const failedJobs = [];
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i];
-    if (result.status === 'fulfilled') {
-      builds.push(...result.value);
-    } else {
-      console.warn(`  ⚠ ${jobs[i].label}: ${result.reason?.message}`);
-      failedJobs.push({ label: jobs[i].label, error: result.reason?.message ?? 'Unknown error' });
+        });
+      }
     }
   }
 
-  const succeeded = results.filter((r) => r.status === 'fulfilled').length;
-  console.log(`  ${succeeded}/${jobs.length} jobs fetched, ${builds.length} total builds`);
-  if (failedJobs.length) console.log(`  Failed: ${failedJobs.map((j) => j.label).join(', ')}`);
-
-  return { builds, failedJobs };
+  if (!jobs.length) throw new Error('No jobs returned from any Jenkins view');
+  console.log(`  Found ${jobs.length} jobs, ${builds.length} total builds`);
+  return { jobs, builds, failedJobs: [] };
 }
 
 // ── Coverage ──────────────────────────────────────────────────────────────────
@@ -504,23 +465,17 @@ async function main() {
 
   const errors = [];
 
-  // Jenkins jobs + builds
+  // Jenkins jobs + builds (single request)
   let jobs = [];
   try {
-    jobs = await fetchJenkinsJobs();
+    const { jobs: j, builds, failedJobs } = await fetchJenkinsData();
+    jobs = j;
     save('jenkins-jobs.json', jobs);
+    save('jenkins-builds.json', { builds, failedJobs });
   } catch (err) {
-    console.error(`  ✗ Jenkins jobs failed: ${err.message}`);
-    errors.push('jenkins-jobs');
+    console.error(`  ✗ Jenkins failed: ${err.message}`);
+    errors.push('jenkins-jobs', 'jenkins-builds');
     save('jenkins-jobs.json', []);
-  }
-
-  try {
-    const buildsData = await fetchJenkinsBuilds(jobs);
-    save('jenkins-builds.json', buildsData);
-  } catch (err) {
-    console.error(`  ✗ Jenkins builds failed: ${err.message}`);
-    errors.push('jenkins-builds');
     save('jenkins-builds.json', { builds: [], failedJobs: [] });
   }
 

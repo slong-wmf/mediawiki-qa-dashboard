@@ -62,6 +62,42 @@ Designed to be run locally via `npm run dev`.
 
 ---
 
+## Docker
+
+You can also run the dashboard using Docker, which removes the need to install
+Node.js locally.
+
+### Prerequisites
+
+- **Docker** and **Docker Compose** (v2)
+
+### Usage
+
+```bash
+# Start the dashboard
+docker compose up
+
+# With a Phabricator API token (optional)
+VITE_PHABRICATOR_TOKEN=api-xxxxx docker compose up
+
+# Or put VITE_PHABRICATOR_TOKEN in your .env file and run
+docker compose up
+```
+
+The app will be available at [http://localhost:5173](http://localhost:5173).
+
+Source files are bind-mounted into the container, so local edits trigger
+hot-reload automatically.
+
+To rebuild the image after dependency changes (e.g. after `git pull` updates
+`package-lock.json`):
+
+```bash
+docker compose up --build
+```
+
+---
+
 ## Environment Variables
 
 | Variable | Description | Required |

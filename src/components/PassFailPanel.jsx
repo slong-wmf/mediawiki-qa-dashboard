@@ -5,7 +5,7 @@ import { PassFailPie } from './PassFailPanel/PassFailPie.jsx';
 import { BuildsTable } from './PassFailPanel/BuildsTable.jsx';
 import FailedJobsDetails from './PassFailPanel/FailedJobsDetails.jsx';
 
-const MS_24H = 24 * 60 * 60 * 1000;
+const MS_7D = 7 * 24 * 60 * 60 * 1000;
 
 /** Skeleton loader for the panel. */
 function Skeleton() {
@@ -36,9 +36,9 @@ export default function PassFailPanel({ builds: rawBuilds, error, loading }) {
   const [view,              setView]              = useState('jobs'); // 'jobs' | 'tests'
   const [showFailedDetails, setShowFailedDetails] = useState(false);
 
-  // Count of failed builds in the past 24h — drives the "Failed jobs" button.
-  const failedLast24hCount = useMemo(() => {
-    const cutoff = Date.now() - MS_24H;
+  // Count of failed builds in the past week — drives the "Failed jobs" button.
+  const failedLastWeekCount = useMemo(() => {
+    const cutoff = Date.now() - MS_7D;
     return builds.filter(
       (b) => b?.status === 'failed' && b?.timestamp && new Date(b.timestamp).getTime() >= cutoff,
     ).length;
@@ -127,6 +127,14 @@ export default function PassFailPanel({ builds: rawBuilds, error, loading }) {
         )}
       </p>
 
+      {/* Scope note — clarifies why the pie slice counts may exceed the
+          "past week" drill-down count below. */}
+      <p className="text-[11px] text-gray-500 italic leading-snug">
+        Scope: the most recent 20 builds per job, regardless of age. The
+        &ldquo;Failed builds · past week&rdquo; count below is filtered to
+        the last 7 days and will usually be smaller.
+      </p>
+
       {pieData.length === 0 ? (
         <p className="text-gray-500 text-sm italic">
           {view === 'tests' ? 'No test-report data in recent builds.' : 'No build data available.'}
@@ -157,7 +165,7 @@ export default function PassFailPanel({ builds: rawBuilds, error, loading }) {
               <button
                 type="button"
                 onClick={() => setShowFailedDetails((v) => !v)}
-                disabled={failedLast24hCount === 0}
+                disabled={failedLastWeekCount === 0}
                 aria-expanded={showFailedDetails}
                 aria-controls="failed-jobs-details"
                 className="w-full text-left px-3 py-1.5 text-xs rounded
@@ -167,9 +175,9 @@ export default function PassFailPanel({ builds: rawBuilds, error, loading }) {
               >
                 <span>
                   <span className="mr-1">{showFailedDetails ? '▾' : '▸'}</span>
-                  Failed jobs · <span className="font-mono">{failedLast24hCount}</span>
+                  Failed builds · <span className="font-mono">{failedLastWeekCount}</span>
                 </span>
-                <span className="text-gray-400">past 24h</span>
+                <span className="text-gray-400">past week</span>
               </button>
               {showFailedDetails && (
                 <div id="failed-jobs-details">

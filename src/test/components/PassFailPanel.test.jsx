@@ -115,26 +115,26 @@ describe('PassFailPanel', () => {
   });
 
   describe('failed-jobs drill-down', () => {
-    it('renders the "Failed jobs" toggle button with the 24h failure count', () => {
+    it('renders the "Failed builds" toggle button with the past-week failure count', () => {
       render(<PassFailPanel builds={BUILDS} loading={false} error={null} />);
-      // BUILDS contains 1 failed build within the last 24h.
-      const btn = screen.getByRole('button', { name: /Failed jobs/ });
+      // BUILDS contains 1 failed build within the last week.
+      const btn = screen.getByRole('button', { name: /Failed builds/ });
       expect(btn).toBeInTheDocument();
       expect(btn).toHaveTextContent('1');
       expect(btn).not.toBeDisabled();
     });
 
-    it('disables the toggle when there are no failed builds in the last 24h', () => {
+    it('disables the toggle when there are no failed builds in the last week', () => {
       const allPassed = BUILDS.map((b) => ({ ...b, status: 'passed' }));
       render(<PassFailPanel builds={allPassed} loading={false} error={null} />);
-      const btn = screen.getByRole('button', { name: /Failed jobs/ });
+      const btn = screen.getByRole('button', { name: /Failed builds/ });
       expect(btn).toBeDisabled();
       expect(btn).toHaveTextContent('0');
     });
 
     it('toggles FailedJobsDetails into and out of the DOM', async () => {
       render(<PassFailPanel builds={BUILDS} loading={false} error={null} />);
-      const btn = screen.getByRole('button', { name: /Failed jobs/ });
+      const btn = screen.getByRole('button', { name: /Failed builds/ });
       expect(screen.queryByTestId('failed-jobs-details')).toBeNull();
       fireEvent.click(btn);
       expect(screen.getByTestId('failed-jobs-details')).toBeInTheDocument();
@@ -147,7 +147,7 @@ describe('PassFailPanel', () => {
     it('hides the toggle in Test results view', () => {
       render(<PassFailPanel builds={BUILDS} loading={false} error={null} />);
       fireEvent.click(screen.getByText('Test results'));
-      expect(screen.queryByRole('button', { name: /Failed jobs/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Failed builds/ })).toBeNull();
     });
   });
 });

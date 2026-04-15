@@ -120,6 +120,9 @@ describe('PassFailPanel – integration contract tests', () => {
 
       render(<PassFailPanel builds={builds} error={null} loading={false} />);
 
+      // Default view is Test results; switch to Job results to reveal the drill-down.
+      fireEvent.click(screen.getByText('Job results'));
+
       const toggle = screen.getByRole('button', { name: /Failed builds/ });
       expect(toggle).toHaveTextContent('2');
       fireEvent.click(toggle);

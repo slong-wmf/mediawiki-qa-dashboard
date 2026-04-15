@@ -1,3 +1,4 @@
+import { useState, useMemo, useCallback } from 'react';
 import { useDashboardData } from './hooks/useDashboardData.js';
 import { Panel } from './components/shared/Panel.jsx';
 import PassFailPanel from './components/PassFailPanel.jsx';
@@ -5,6 +6,8 @@ import CoveragePanel from './components/CoveragePanel.jsx';
 import ExecutionTimePanel from './components/ExecutionTimePanel.jsx';
 import BugsPanel from './components/BugsPanel.jsx';
 import TrainBlockersPanel from './components/TrainBlockersPanel.jsx';
+import { StewardFilter } from './components/CoveragePanel/StewardFilter.jsx';
+import { uniqueStewards } from './services/maintainers.js';
 import { USE_STATIC_DATA } from './services/staticData.js';
 
 /**
@@ -40,6 +43,14 @@ export default function App() {
   const refreshIntervalMin = Math.round(
     (Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 3_600_000) / 60_000,
   );
+
+  // Shared steward filter — narrows both Pass/Fail Rates and Code Coverage.
+  const [activeStewards, setActiveStewards] = useState([]);
+  const stewardList = useMemo(
+    () => (maintainers instanceof Map ? uniqueStewards(maintainers) : []),
+    [maintainers],
+  );
+  const handleStewardChange = useCallback((next) => setActiveStewards(next), []);
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
@@ -80,63 +91,92 @@ export default function App() {
 
       {/* ── Main panels ── */}
       <main className="flex-1 p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          <Panel
-            title="Pass / Fail Rates"
-            loading={initialLoading || jenkinsLoading}
-            error={errors.jenkins}
-            source="Jenkins"
-            action={
-              <>
-                {jobListError && (
-                  <span
-                    className="text-xs text-red-400"
-                    title={jobListError.message}
-                  >
-                    Fetch failed
-                  </span>
-                )}
-                <button
-                  onClick={refreshJobList}
-                  disabled={jobListLoading || loading || jenkinsLoading}
-                  className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600
-                             disabled:opacity-50 text-gray-300 rounded transition-colors"
-                >
-                  {jobListLoading ? 'Fetching…' : 'Fetch Job Information'}
-                </button>
-              </>
-            }
-          >
-            {jenkinsFailedJobs?.length > 0 && !errors.jenkins && (
-              <div
-                className="mb-3 rounded border border-amber-700/60 bg-amber-900/20 px-3 py-2 text-xs text-amber-300"
-                title={jenkinsFailedJobs.map((j) => `${j.label}: ${j.error}`).join('\n')}
-              >
-                <span className="font-medium">Partial data:</span>{' '}
-                {jenkinsFailedJobs.length} job{jenkinsFailedJobs.length !== 1 ? 's' : ''} failed to load
-                ({jenkinsFailedJobs.slice(0, 3).map((j) => j.label).join(', ')}
-                {jenkinsFailedJobs.length > 3 ? `, +${jenkinsFailedJobs.length - 3} more` : ''})
-              </div>
-            )}
-            <PassFailPanel builds={builds} error={errors.jenkins} loading={initialLoading || jenkinsLoading} />
-          </Panel>
-
-          <Panel
-            title="Code Coverage"
-            loading={initialLoading}
-            error={errors.coverage}
-            source="Coverage index"
-          >
-            <CoveragePanel
-              coverage={coverage}
-              error={errors.coverage}
-              loading={initialLoading}
+        {/* Shared steward filter wraps Pass/Fail Rates + Code Coverage. The
+            dropdown in this header applies to both enclosed panels. */}
+        <section
+          aria-label="Pass/Fail and Code Coverage"
+          className="rounded border border-gray-700 bg-gray-800/40 p-4"
+        >
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+            <h2 className="text-sm font-semibold text-gray-200 uppercase tracking-wide">
+              Pass / Fail &amp; Coverage
+            </h2>
+            <StewardFilter
               maintainers={maintainers}
               maintainersError={errors.maintainers}
+              stewardList={stewardList}
+              activeStewards={activeStewards}
+              onChange={handleStewardChange}
             />
-          </Panel>
+          </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Panel
+              title="Pass / Fail Rates"
+              loading={initialLoading || jenkinsLoading}
+              error={errors.jenkins}
+              source="Jenkins"
+              action={
+                <>
+                  {jobListError && (
+                    <span
+                      className="text-xs text-red-400"
+                      title={jobListError.message}
+                    >
+                      Fetch failed
+                    </span>
+                  )}
+                  <button
+                    onClick={refreshJobList}
+                    disabled={jobListLoading || loading || jenkinsLoading}
+                    className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600
+                               disabled:opacity-50 text-gray-300 rounded transition-colors"
+                  >
+                    {jobListLoading ? 'Fetching…' : 'Fetch Job Information'}
+                  </button>
+                </>
+              }
+            >
+              {jenkinsFailedJobs?.length > 0 && !errors.jenkins && (
+                <div
+                  className="mb-3 rounded border border-amber-700/60 bg-amber-900/20 px-3 py-2 text-xs text-amber-300"
+                  title={jenkinsFailedJobs.map((j) => `${j.label}: ${j.error}`).join('\n')}
+                >
+                  <span className="font-medium">Partial data:</span>{' '}
+                  {jenkinsFailedJobs.length} job{jenkinsFailedJobs.length !== 1 ? 's' : ''} failed to load
+                  ({jenkinsFailedJobs.slice(0, 3).map((j) => j.label).join(', ')}
+                  {jenkinsFailedJobs.length > 3 ? `, +${jenkinsFailedJobs.length - 3} more` : ''})
+                </div>
+              )}
+              <PassFailPanel
+                builds={builds}
+                error={errors.jenkins}
+                loading={initialLoading || jenkinsLoading}
+                activeStewards={activeStewards}
+                maintainers={maintainers}
+              />
+            </Panel>
+
+            <Panel
+              title="Code Coverage"
+              loading={initialLoading}
+              error={errors.coverage}
+              source="Coverage index"
+            >
+              <CoveragePanel
+                coverage={coverage}
+                error={errors.coverage}
+                loading={initialLoading}
+                maintainers={maintainers}
+                activeStewards={activeStewards}
+              />
+            </Panel>
+          </div>
+        </section>
+
+        {/* Job Total Time — outside the steward wrapper so it remains unaffected. */}
+        <div className="mt-6">
           <Panel
             title="Job Total Time"
             loading={initialLoading || jenkinsLoading}
@@ -145,7 +185,6 @@ export default function App() {
           >
             <ExecutionTimePanel builds={builds} error={errors.jenkins} loading={initialLoading || jenkinsLoading} />
           </Panel>
-
         </div>
 
         {/* ── Bugs row (full width) ── */}

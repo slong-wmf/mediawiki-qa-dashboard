@@ -1,12 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
 import { isActiveOnWikipedia } from './../data/activeExtensions.js';
-import { uniqueStewards } from './../services/maintainers.js';
 import { COVERAGE_BUCKETS } from './../constants/coverage.js';
 import { truncate } from './../utils/format.js';
 import { PanelSkeleton } from './shared/Skeleton.jsx';
 import { ErrorBanner } from './shared/ErrorBanner.jsx';
 import { ScopeFilter } from './CoveragePanel/ScopeFilter.jsx';
-import { StewardFilter } from './CoveragePanel/StewardFilter.jsx';
 import { MedianHeadline } from './CoveragePanel/MedianHeadline.jsx';
 import { NoCoverageNote } from './CoveragePanel/NoCoverageNote.jsx';
 import { ChartViewToggle } from './CoveragePanel/ChartViewToggle.jsx';
@@ -21,12 +19,16 @@ import { BucketCards } from './CoveragePanel/BucketCards.jsx';
  * and derives the filtered extension lists with useMemo. Rendering is
  * delegated to the subcomponents in ./CoveragePanel/.
  *
+ * The Steward filter is owned by the parent (`App`) so it can narrow both the
+ * Pass/Fail Rates and Code Coverage panels simultaneously. `activeStewards`
+ * and `maintainers` arrive as props.
+ *
  * @param {{
  *   coverage: { core, extensions }|null,
  *   error: Error|null,
  *   loading: boolean,
  *   maintainers: Map|null,
- *   maintainersError: Error|null,
+ *   activeStewards?: string[],
  * }} props
  */
 export default function CoveragePanel({
@@ -34,12 +36,11 @@ export default function CoveragePanel({
   error,
   loading,
   maintainers = null,
-  maintainersError = null,
+  activeStewards = [],
 }) {
   const [activeBucket,  setActiveBucket]  = useState(null);
   const [chartView,     setChartView]     = useState('table'); // 'top' | 'lowest' | 'table'
   const [wikiOnly,      setWikiOnly]      = useState(true);
-  const [activeStewards, setActiveStewards] = useState([]);
 
   // Hooks must run unconditionally before any early returns. Wrapped in
   // useMemo so the fallback `[]` does not churn downstream memo dependencies
@@ -47,11 +48,6 @@ export default function CoveragePanel({
   const allExtensions = useMemo(() => coverage?.extensions ?? [], [coverage]);
 
   const isValidMap = maintainers instanceof Map;
-
-  const stewardList = useMemo(
-    () => (isValidMap ? uniqueStewards(maintainers) : []),
-    [isValidMap, maintainers],
-  );
 
   const extensions = useMemo(
     () => (wikiOnly ? allExtensions.filter((e) => isActiveOnWikipedia(e.name)) : allExtensions),
@@ -109,12 +105,6 @@ export default function CoveragePanel({
   const handleWikiOnlyChange = useCallback((next) => {
     setWikiOnly(next);
     setActiveBucket(null);
-    setActiveStewards([]);
-  }, []);
-
-  const handleStewardChange = useCallback((next) => {
-    setActiveStewards(next);
-    setActiveBucket(null);
   }, []);
 
   if (loading) return <PanelSkeleton />;
@@ -135,14 +125,6 @@ export default function CoveragePanel({
         onChange={handleWikiOnlyChange}
         allCount={allExtensions.length}
         wikipediaCount={extensions.length}
-      />
-
-      <StewardFilter
-        maintainers={maintainers}
-        maintainersError={maintainersError}
-        stewardList={stewardList}
-        activeStewards={activeStewards}
-        onChange={handleStewardChange}
       />
 
       <MedianHeadline

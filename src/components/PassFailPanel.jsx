@@ -21,20 +21,83 @@ function Skeleton() {
 const STATUS_MAP = { Passed: 'passed', Failed: 'failed', Other: 'other' };
 
 /**
+ * Extract the Jenkins job slug from a build record. Prefers the build_url path
+ * segment; falls back to the `job` field when the URL is absent.
+ */
+function slugFromBuild(b) {
+  const fromUrl = (b?.build_url || b?.job_url || '').match(/\/job\/([^/]+)\//)?.[1];
+  return fromUrl || b?.job || '';
+}
+
+/**
+ * Narrow a list of builds to those owned by one of the selected stewards.
+ *
+ * Uses the `selenium-daily-beta-<ExtName>` slug convention to map each build
+ * to an extension, then looks up the extension's steward in the maintainers
+ * map. Builds whose slug does not follow this pattern (e.g. core Quibble jobs)
+ * are excluded when a steward filter is active.
+ *
+ * Exported for unit testing.
+ *
+ * @param {Array} builds
+ * @param {string[]} activeStewards
+ * @param {Map|null} maintainers
+ * @returns {Array}
+ */
+export function filterBuildsBySteward(builds, activeStewards, maintainers) {
+  if (!activeStewards?.length) return builds;
+  if (!(maintainers instanceof Map)) return builds;
+  const stewardSet = new Set(activeStewards);
+  const allowedExts = new Set(
+    [...maintainers.entries()]
+      .filter(([, v]) => v && stewardSet.has(v.steward))
+      .map(([name]) => name),
+  );
+  if (!allowedExts.size) return [];
+  return builds.filter((b) => {
+    const m = slugFromBuild(b).match(/^selenium-daily-beta-(.+)$/);
+    return !!m && allowedExts.has(m[1]);
+  });
+}
+
+/**
  * Pass/Fail Rates panel.
  *
  * Two views, toggled at the top:
- *  • "Job results" — one data point per build (did the whole Jenkins job pass?).
  *  • "Test results" — aggregated WDIO test counts from the selenium-daily-beta-*
- *    jobs, which publish a JUnit TestResultAction.
+ *    jobs, which publish a JUnit TestResultAction. (Default view.)
+ *  • "Job results" — one data point per build (did the whole Jenkins job pass?).
  *
- * @param {{ builds: Array, error: Error|null, loading: boolean }} props
+ * When `activeStewards` is non-empty and `maintainers` is provided, the build
+ * list is narrowed to `selenium-daily-beta-<ExtName>` jobs whose extension is
+ * owned by one of the selected stewards. Core Quibble/Selenium jobs do not map
+ * to a single extension and are excluded whenever a steward filter is active.
+ *
+ * @param {{
+ *   builds: Array,
+ *   error: Error|null,
+ *   loading: boolean,
+ *   activeStewards?: string[],
+ *   maintainers?: Map|null,
+ * }} props
  */
-export default function PassFailPanel({ builds: rawBuilds, error, loading }) {
-  const builds = Array.isArray(rawBuilds) ? rawBuilds : [];
+export default function PassFailPanel({
+  builds: rawBuilds,
+  error,
+  loading,
+  activeStewards = [],
+  maintainers = null,
+}) {
+  const allBuilds = Array.isArray(rawBuilds) ? rawBuilds : [];
   const [activeStatus,      setActiveStatus]      = useState(null);
-  const [view,              setView]              = useState('jobs'); // 'jobs' | 'tests'
+  const [view,              setView]              = useState('tests'); // 'tests' | 'jobs'
   const [showFailedDetails, setShowFailedDetails] = useState(false);
+
+  // Narrow builds by steward when a filter is active.
+  const builds = useMemo(
+    () => filterBuildsBySteward(allBuilds, activeStewards, maintainers),
+    [allBuilds, activeStewards, maintainers],
+  );
 
   // Count of failed builds in the past week — drives the "Failed jobs" button.
   const failedLastWeekCount = useMemo(() => {

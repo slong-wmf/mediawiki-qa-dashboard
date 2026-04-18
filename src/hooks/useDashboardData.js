@@ -13,6 +13,7 @@ import { fetchRecentBuilds, fetchTrackedJobs } from '../services/jenkins.js';
 import { fetchCoverageData } from '../services/coverage.js';
 import { fetchRecentBugs, fetchTrainBlockers } from '../services/phabricator.js';
 import { fetchMaintainers } from '../services/maintainers.js';
+import { fetchAutomatedTests } from '../services/automatedTests.js';
 import { USE_STATIC_DATA, fetchStaticJson } from '../services/staticData.js';
 
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 3_600_000;
@@ -24,6 +25,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
  * @property {Error|null} phabricator
  * @property {Error|null} trainBlockers
  * @property {Error|null} maintainers
+ * @property {Error|null} automatedTests
  */
 
 /**
@@ -34,6 +36,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
  * @property {Object|null}     bugs             - Phabricator open task records ({ tasks, totalFetched, hasMore, cutoffDate })
  * @property {object|null}     trainBlockers    - { trainTask, blockers, totalBlockers } for the previous train
  * @property {Map|null}        maintainers      - Map<extName, {steward,maintainer}>, or null while loading/failed
+ * @property {object|null}     automatedTests   - { generatedAt, repoCount, testCount, repos } from browser-test-scanner
  * @property {Date|null}       lastRefreshed    - Timestamp of the last completed fetch cycle
  * @property {boolean}         loading          - True while any full re-fetch is in flight (initial or manual)
  * @property {boolean}         initialLoading   - True only until the first fetch cycle completes; panels use
@@ -62,6 +65,7 @@ export function useDashboardData() {
   const [bugs, setBugs] = useState(null);
   const [trainBlockers, setTrainBlockers] = useState(null);
   const [maintainers, setMaintainers] = useState(null);
+  const [automatedTests, setAutomatedTests] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -74,6 +78,7 @@ export function useDashboardData() {
     phabricator: null,
     trainBlockers: null,
     maintainers: null,
+    automatedTests: null,
   });
   const [jobListLoading, setJobListLoading] = useState(false);
   const [jobListError, setJobListError] = useState(null);
@@ -96,14 +101,21 @@ export function useDashboardData() {
     // will fall back to DEFAULT_TRACKED_JOBS.
     const jobList = trackedJobsRef.current ?? undefined;
 
-    const [jenkinsResult, coverageResult, phabResult, trainBlockersResult, maintainersResult] =
-      await Promise.allSettled([
-        fetchRecentBuilds(jobList),
-        fetchCoverageData(),
-        fetchRecentBugs(),
-        fetchTrainBlockers(),
-        fetchMaintainers(),
-      ]);
+    const [
+      jenkinsResult,
+      coverageResult,
+      phabResult,
+      trainBlockersResult,
+      maintainersResult,
+      automatedTestsResult,
+    ] = await Promise.allSettled([
+      fetchRecentBuilds(jobList),
+      fetchCoverageData(),
+      fetchRecentBugs(),
+      fetchTrainBlockers(),
+      fetchMaintainers(),
+      fetchAutomatedTests(),
+    ]);
 
     if (!mountedRef.current) return;
 
@@ -145,6 +157,13 @@ export function useDashboardData() {
       setErrors((prev) => ({ ...prev, maintainers: null }));
     } else {
       setErrors((prev) => ({ ...prev, maintainers: maintainersResult.reason }));
+    }
+
+    if (automatedTestsResult.status === 'fulfilled') {
+      setAutomatedTests(automatedTestsResult.value);
+      setErrors((prev) => ({ ...prev, automatedTests: null }));
+    } else {
+      setErrors((prev) => ({ ...prev, automatedTests: automatedTestsResult.reason }));
     }
 
     // In static mode, show the snapshot generation time rather than "now".
@@ -257,6 +276,7 @@ export function useDashboardData() {
     bugs,
     trainBlockers,
     maintainers,
+    automatedTests,
     lastRefreshed,
     loading,
     initialLoading,

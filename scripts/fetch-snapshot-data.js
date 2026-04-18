@@ -421,6 +421,84 @@ async function fetchTrainBlockers() {
   return { trainTask, blockers, totalBlockers: blockers.length };
 }
 
+// ── Automated tests inventory (browser-test-scanner) ─────────────────────────
+
+const AUTOMATED_TESTS_URL =
+  'https://www.mediawiki.org/w/index.php' +
+  '?title=Wikimedia_Quality_Services/Automated_tests_available/data.json&action=raw';
+
+function normaliseTestFramework(raw) {
+  if (typeof raw !== 'string') return 'other';
+  const v = raw.toLowerCase().trim();
+  if (v === 'wdio' || v === 'webdriverio' || v === 'webdriver') return 'wdio';
+  if (v === 'cypress') return 'cypress';
+  return 'other';
+}
+
+function shortRepoName(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return '';
+  const trimmed = raw.trim();
+  const lastSlash = trimmed.lastIndexOf('/');
+  return lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
+}
+
+function normaliseTestRepo(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const repoPath = typeof raw.repo === 'string'
+    ? raw.repo
+    : typeof raw.name === 'string' ? raw.name : '';
+  const name = shortRepoName(repoPath);
+  if (!name) return null;
+  const tests = Array.isArray(raw.tests)
+    ? raw.tests
+        .map((t) => (typeof t === 'string' ? { name: t }
+                   : t && typeof t === 'object' && typeof t.name === 'string' ? { name: t.name }
+                   : null))
+        .filter(Boolean)
+    : [];
+  return {
+    name,
+    repoPath: repoPath || name,
+    framework: normaliseTestFramework(raw.framework ?? raw.kind ?? raw.type),
+    mediawikiVersion:  typeof raw.mediawikiVersion  === 'string' ? raw.mediawikiVersion  : null,
+    frameworkVersion:  typeof raw.frameworkVersion  === 'string' ? raw.frameworkVersion
+                     : typeof raw.wdioVersion       === 'string' ? raw.wdioVersion
+                     : typeof raw.cypressVersion    === 'string' ? raw.cypressVersion
+                     : null,
+    gatedSelenium:     Boolean(raw.gatedSelenium ?? raw.gated ?? false),
+    daily:             Boolean(raw.daily ?? (Array.isArray(raw.dailyJobs) && raw.dailyJobs.length > 0)),
+    dailyJobs:         Array.isArray(raw.dailyJobs) ? raw.dailyJobs : [],
+    testCount:         typeof raw.testCount === 'number' ? raw.testCount : tests.length,
+    tests,
+  };
+}
+
+async function fetchAutomatedTests() {
+  console.log('\n📦 Automated tests: fetching from mediawiki.org…');
+  const res = await fetchWithRetry(AUTOMATED_TESTS_URL);
+  if (!res.ok) throw new Error(`Automated tests fetch failed: ${res.status} ${res.statusText}`);
+
+  const envelope = await res.json();
+  const rawRepos = envelope?.repos;
+  const repoList = Array.isArray(rawRepos)
+    ? rawRepos
+    : rawRepos && typeof rawRepos === 'object'
+      ? Object.entries(rawRepos).map(([key, value]) => ({
+          repo: value?.repo ?? value?.name ?? key,
+          ...value,
+        }))
+      : [];
+  const repos = repoList.map(normaliseTestRepo).filter(Boolean);
+  const testCount = typeof envelope?.testCount === 'number'
+    ? envelope.testCount
+    : repos.reduce((n, r) => n + r.testCount, 0);
+  const repoCount = typeof envelope?.repoCount === 'number' ? envelope.repoCount : repos.length;
+  const generatedAt = typeof envelope?.generatedAt === 'string' ? envelope.generatedAt : null;
+
+  console.log(`  ${repos.length} repos, ${testCount} tests`);
+  return { generatedAt, repoCount, testCount, repos };
+}
+
 // ── Maintainers ───────────────────────────────────────────────────────────────
 
 async function fetchMaintainers() {
@@ -523,6 +601,16 @@ async function main() {
     console.error(`  ✗ Maintainers failed: ${err.message}`);
     errors.push('maintainers');
     save('maintainers.json', {});
+  }
+
+  // Automated tests inventory (browser-test-scanner)
+  try {
+    const automatedTests = await fetchAutomatedTests();
+    save('automated-tests.json', automatedTests);
+  } catch (err) {
+    console.error(`  ✗ Automated tests failed: ${err.message}`);
+    errors.push('automated-tests');
+    save('automated-tests.json', { generatedAt: null, repoCount: 0, testCount: 0, repos: [] });
   }
 
   // Metadata

@@ -6,6 +6,7 @@ import CoveragePanel from './components/CoveragePanel.jsx';
 import ExecutionTimePanel from './components/ExecutionTimePanel.jsx';
 import BugsPanel from './components/BugsPanel.jsx';
 import TrainBlockersPanel from './components/TrainBlockersPanel.jsx';
+import AutomatedTestsPanel from './components/AutomatedTestsPanel.jsx';
 import { StewardFilter } from './components/CoveragePanel/StewardFilter.jsx';
 import { uniqueStewards } from './services/maintainers.js';
 import { USE_STATIC_DATA } from './services/staticData.js';
@@ -29,6 +30,7 @@ export default function App() {
     bugs,
     trainBlockers,
     maintainers,
+    automatedTests,
     lastRefreshed,
     loading,
     initialLoading,
@@ -92,15 +94,16 @@ export default function App() {
       {/* ── Main panels ── */}
       <main className="flex-1 p-6">
 
-        {/* Shared steward filter wraps Pass/Fail Rates + Code Coverage. The
-            dropdown in this header applies to both enclosed panels. */}
+        {/* Shared steward filter wraps Pass/Fail Rates, Code Coverage, and
+            the Automated Tests inventory. The dropdown in this header applies
+            to all three enclosed panels. */}
         <section
-          aria-label="Pass/Fail and Code Coverage"
+          aria-label="Pass/Fail, Code Coverage, and Automated Tests"
           className="rounded border border-gray-700 bg-gray-800/40 p-4"
         >
           <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
             <h2 className="text-sm font-semibold text-gray-200 uppercase tracking-wide">
-              Pass / Fail &amp; Coverage
+              Pass / Fail, Coverage &amp; Automated Tests
             </h2>
             <StewardFilter
               maintainers={maintainers}
@@ -173,6 +176,23 @@ export default function App() {
               />
             </Panel>
           </div>
+
+          <div className="mt-6">
+            <Panel
+              title="Automated Tests Inventory"
+              loading={initialLoading}
+              error={errors.automatedTests}
+              source="browser-test-scanner"
+            >
+              <AutomatedTestsPanel
+                data={automatedTests}
+                error={null}
+                loading={initialLoading}
+                maintainers={maintainers}
+                activeStewards={activeStewards}
+              />
+            </Panel>
+          </div>
         </section>
 
         {/* Job Total Time — outside the steward wrapper so it remains unaffected. */}
@@ -219,7 +239,7 @@ export default function App() {
 
       {/* ── Footer ── */}
       <footer className="bg-gray-950 border-t border-gray-700 px-6 py-3 text-xs text-gray-500 flex items-center justify-between">
-        <span>Data sources: Jenkins · doc.wikimedia.org · Phabricator</span>
+        <span>Data sources: Jenkins · doc.wikimedia.org · Phabricator · browser-test-scanner</span>
         <span>Refresh interval: {refreshIntervalMin} min</span>
       </footer>
 

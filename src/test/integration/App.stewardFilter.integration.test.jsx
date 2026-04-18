@@ -101,13 +101,13 @@ describe('App – shared steward filter', () => {
   it('renders the Steward dropdown in the Pass/Fail & Coverage wrapper', () => {
     render(<App />);
     // Wrapper header is labelled; dropdown button starts as "All stewards".
-    const wrapper = screen.getByLabelText('Pass/Fail and Code Coverage');
+    const wrapper = screen.getByLabelText('Pass/Fail, Code Coverage, and Automated Tests');
     expect(within(wrapper).getByRole('button', { name: /All stewards/ })).toBeInTheDocument();
   });
 
   it('narrows Pass/Fail Rates and Code Coverage to the selected steward', () => {
     render(<App />);
-    const wrapper = screen.getByLabelText('Pass/Fail and Code Coverage');
+    const wrapper = screen.getByLabelText('Pass/Fail, Code Coverage, and Automated Tests');
 
     // Open the dropdown and select Growth (owns Echo).
     fireEvent.click(within(wrapper).getByRole('button', { name: /All stewards/ }));
@@ -125,7 +125,7 @@ describe('App – shared steward filter', () => {
 
   it('leaves the Job Total Time panel outside the wrapper', () => {
     render(<App />);
-    const wrapper = screen.getByLabelText('Pass/Fail and Code Coverage');
+    const wrapper = screen.getByLabelText('Pass/Fail, Code Coverage, and Automated Tests');
     // "Job Total Time" heading should NOT be inside the wrapper section.
     expect(within(wrapper).queryByText('Job Total Time')).toBeNull();
     // But it should exist somewhere on the page.

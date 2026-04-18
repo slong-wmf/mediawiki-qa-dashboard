@@ -5,11 +5,13 @@ import { fetchRecentBuilds, fetchTrackedJobs } from '../../services/jenkins.js';
 import { fetchCoverageData } from '../../services/coverage.js';
 import { fetchRecentBugs, fetchTrainBlockers } from '../../services/phabricator.js';
 import { fetchMaintainers } from '../../services/maintainers.js';
+import { fetchAutomatedTests } from '../../services/automatedTests.js';
 
 vi.mock('../../services/jenkins.js');
 vi.mock('../../services/coverage.js');
 vi.mock('../../services/phabricator.js');
 vi.mock('../../services/maintainers.js');
+vi.mock('../../services/automatedTests.js');
 
 const MOCK_BUILDS = [
   { job: 'TestJob', status: 'passed', duration_seconds: 60, timestamp: new Date().toISOString() },
@@ -44,6 +46,9 @@ describe('useDashboardData', () => {
     fetchTrainBlockers.mockResolvedValue(MOCK_TRAIN_BLOCKERS);
     fetchTrackedJobs.mockResolvedValue(MOCK_JOBS);
     fetchMaintainers.mockResolvedValue(new Map());
+    fetchAutomatedTests.mockResolvedValue({
+      generatedAt: null, repoCount: 0, testCount: 0, repos: [],
+    });
   });
 
   afterEach(() => {
@@ -84,6 +89,7 @@ describe('useDashboardData', () => {
         phabricator: null,
         trainBlockers: null,
         maintainers: null,
+        automatedTests: null,
       });
     });
   });
@@ -127,6 +133,7 @@ describe('useDashboardData', () => {
         phabricator: null,
         trainBlockers: null,
         maintainers: null,
+        automatedTests: null,
       });
     });
   });

@@ -126,6 +126,63 @@ export function makeValidBlocker(overrides = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Automated tests inventory (browser-test-scanner)
+// ---------------------------------------------------------------------------
+
+/** A single valid repo entry as produced by fetchAutomatedTests(). */
+export function makeValidTestRepo(overrides = {}) {
+  return {
+    name: 'AbuseFilter',
+    repoPath: 'mediawiki/extensions/AbuseFilter',
+    framework: 'wdio',
+    mediawikiVersion: '9.27.0',
+    frameworkVersion: '6.5.0',
+    gatedSelenium: true,
+    testCount: 3,
+    tests: [
+      { name: 'page should exist' },
+      { name: 'allows saving an edit' },
+      { name: 'surfaces filter matches' },
+    ],
+    ...overrides,
+  };
+}
+
+/** A valid automatedTests envelope as returned by fetchAutomatedTests(). */
+export function makeValidAutomatedTests(overrides = {}) {
+  const repos = [
+    makeValidTestRepo(),
+    makeValidTestRepo({
+      name: 'Cite',
+      repoPath: 'mediawiki/extensions/Cite',
+      framework: 'cypress',
+      frameworkVersion: '15.11.0',
+      gatedSelenium: true,
+      testCount: 2,
+      tests: [
+        { name: 'renders references' },
+        { name: 'handles citation syntax' },
+      ],
+    }),
+    makeValidTestRepo({
+      name: 'Echo',
+      repoPath: 'mediawiki/extensions/Echo',
+      framework: 'wdio',
+      gatedSelenium: false,
+      testCount: 1,
+      tests: [{ name: 'notifications flyout opens' }],
+    }),
+  ];
+  return {
+    generatedAt: '2026-04-17T18:55:37Z',
+    repoCount: repos.length,
+    testCount: repos.reduce((n, r) => n + r.testCount, 0),
+    repos,
+    ...overrides,
+  };
+}
+
 /** A valid trainBlockers envelope as returned by fetchTrainBlockers(). */
 export function makeValidTrainBlockers(blockers = [makeValidBlocker()], overrides = {}) {
   return {

@@ -29,7 +29,7 @@ const LIVE_URL = `/api/mw-raw/w/index.php?title=${encodeURIComponent(JSON_PAGE_T
  * @property {boolean} daily                Whether the repo has a daily Jenkins job
  * @property {Array<DailyJob>} dailyJobs    Last-7-day pass/total counts per daily Jenkins job
  * @property {number}  testCount
- * @property {Array<{ name: string }>} tests
+ * @property {Array<{ name: string, daily: boolean }>} tests
  */
 
 /**
@@ -103,8 +103,10 @@ function normaliseRepo(raw) {
   const tests = Array.isArray(raw.tests)
     ? raw.tests
         .map((t) => {
-          if (typeof t === 'string') return { name: t };
-          if (t && typeof t === 'object' && typeof t.name === 'string') return { name: t.name };
+          if (typeof t === 'string') return { name: t, daily: false };
+          if (t && typeof t === 'object' && typeof t.name === 'string') {
+            return { name: t.name, daily: Boolean(t.daily) };
+          }
           return null;
         })
         .filter(Boolean)

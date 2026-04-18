@@ -145,7 +145,14 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96' }) {
                     <td colSpan={7} className="py-2 pl-1 pr-3">
                       <ul className="list-disc pl-4 text-gray-400 space-y-0.5">
                         {repo.tests.map((t, i) => (
-                          <li key={`${rowKey}-${i}`}>{t.name}</li>
+                          <li key={`${rowKey}-${i}`}>
+                            {t.daily && (
+                              <span className="mr-1.5 rounded bg-blue-900/50 px-1 text-[10px] font-medium uppercase tracking-wide text-blue-300">
+                                daily
+                              </span>
+                            )}
+                            {t.name}
+                          </li>
                         ))}
                       </ul>
                     </td>

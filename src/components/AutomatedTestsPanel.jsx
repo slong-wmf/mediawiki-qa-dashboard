@@ -53,6 +53,7 @@ export default function AutomatedTestsPanel({
   activeStewards = [],
 }) {
   const [framework, setFramework] = useState('all');
+  const [query, setQuery] = useState('');
 
   const allRepos = Array.isArray(data?.repos) ? data.repos : [];
 
@@ -83,10 +84,24 @@ export default function AutomatedTestsPanel({
     };
   }, [stewardFilteredRepos]);
 
-  const visibleRepos = useMemo(() => {
+  const frameworkFilteredRepos = useMemo(() => {
     if (framework === 'all') return stewardFilteredRepos;
     return stewardFilteredRepos.filter((r) => r.framework === framework);
   }, [stewardFilteredRepos, framework]);
+
+  const visibleRepos = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return frameworkFilteredRepos;
+    return frameworkFilteredRepos
+      .map((repo) => {
+        const matching = (repo.tests ?? []).filter((t) =>
+          t.name.toLowerCase().includes(q),
+        );
+        if (matching.length === 0) return null;
+        return { ...repo, tests: matching, testCount: matching.length };
+      })
+      .filter(Boolean);
+  }, [frameworkFilteredRepos, query]);
 
   if (loading) return <PanelSkeleton />;
   if (error)   return <ErrorBanner source="Automated tests inventory" error={error} />;
@@ -119,14 +134,25 @@ export default function AutomatedTestsPanel({
         <p className="text-xs text-gray-400">
           {visibleRepos.length} repo{visibleRepos.length !== 1 ? 's' : ''} — click a row to view test names
         </p>
-        <FrameworkToggle value={framework} onChange={setFramework} counts={counts} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search test names…"
+            className="rounded border border-gray-600 bg-gray-700/40 px-2 py-1 text-xs text-gray-100 placeholder:text-gray-500 focus:border-blue-400 focus:outline-none w-48"
+          />
+          <FrameworkToggle value={framework} onChange={setFramework} counts={counts} />
+        </div>
       </div>
 
       {visibleRepos.length > 0 ? (
-        <TestsTable repos={visibleRepos} />
+        <TestsTable repos={visibleRepos} forceExpand={query.trim().length > 0} />
       ) : (
         <p className="text-gray-500 text-xs italic">
-          No repos match the current filter.
+          {query.trim()
+            ? `No tests match “${query.trim()}”.`
+            : 'No repos match the current filter.'}
         </p>
       )}
 

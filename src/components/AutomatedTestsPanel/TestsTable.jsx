@@ -47,7 +47,7 @@ const FRAMEWORK_CLASS = {
  *
  * Sort is handled locally — click a header to toggle direction.
  */
-export function TestsTable({ repos, maxHeightClass = 'max-h-96' }) {
+export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = false }) {
   const [sortKey, setSortKey] = useState('testCount');
   const [sortDir, setSortDir] = useState('desc');
   const [expanded, setExpanded] = useState(null);
@@ -110,7 +110,7 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96' }) {
         <tbody>
           {sorted.map((repo) => {
             const rowKey = `${repo.name}::${repo.framework}`;
-            const isOpen = expanded === rowKey;
+            const isOpen = forceExpand || expanded === rowKey;
             return (
               <Fragment key={rowKey}>
                 <tr

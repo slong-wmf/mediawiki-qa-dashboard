@@ -26,6 +26,28 @@ export function filterReposBySteward(repos, activeStewards, maintainers) {
   return repos.filter((r) => stewardSet.has(maintainers.get(r.name)?.steward));
 }
 
+function summariseRepos(repos) {
+  const counts = { all: repos.length, wdio: 0, cypress: 0 };
+  let testCount = 0;
+  let gatedCount = 0;
+  for (const r of repos) {
+    if (r.framework === 'wdio') counts.wdio++;
+    else if (r.framework === 'cypress') counts.cypress++;
+    testCount += r.testCount ?? 0;
+    if (r.gatedSelenium) gatedCount++;
+  }
+  return {
+    counts,
+    grandTotals: {
+      repoCount: counts.all,
+      testCount,
+      wdioCount: counts.wdio,
+      cypressCount: counts.cypress,
+      gatedCount,
+    },
+  };
+}
+
 /**
  * Automated Tests Inventory panel.
  *
@@ -62,27 +84,7 @@ export default function AutomatedTestsPanel({
     [allRepos, activeStewards, maintainers],
   );
 
-  const { counts, totals } = useMemo(() => {
-    const c = { all: stewardFilteredRepos.length, wdio: 0, cypress: 0 };
-    let testCount = 0;
-    let gatedCount = 0;
-    for (const r of stewardFilteredRepos) {
-      if (r.framework === 'wdio') c.wdio++;
-      else if (r.framework === 'cypress') c.cypress++;
-      testCount += r.testCount ?? 0;
-      if (r.gatedSelenium) gatedCount++;
-    }
-    return {
-      counts: c,
-      totals: {
-        repoCount: c.all,
-        testCount,
-        wdioCount: c.wdio,
-        cypressCount: c.cypress,
-        gatedCount,
-      },
-    };
-  }, [stewardFilteredRepos]);
+  const { counts, grandTotals } = useMemo(() => summariseRepos(stewardFilteredRepos), [stewardFilteredRepos]);
 
   const frameworkFilteredRepos = useMemo(() => {
     if (framework === 'all') return stewardFilteredRepos;
@@ -94,6 +96,7 @@ export default function AutomatedTestsPanel({
     if (!q) return frameworkFilteredRepos;
     return frameworkFilteredRepos
       .map((repo) => {
+        if (repo.name.toLowerCase().includes(q)) return repo;
         const matching = (repo.tests ?? []).filter((t) =>
           t.name.toLowerCase().includes(q),
         );
@@ -102,6 +105,8 @@ export default function AutomatedTestsPanel({
       })
       .filter(Boolean);
   }, [frameworkFilteredRepos, query]);
+
+  const visibleTotals = useMemo(() => summariseRepos(visibleRepos).grandTotals, [visibleRepos]);
 
   if (loading) return <PanelSkeleton />;
   if (error)   return <ErrorBanner source="Automated tests inventory" error={error} />;
@@ -122,17 +127,13 @@ export default function AutomatedTestsPanel({
 
   return (
     <div className="space-y-4">
-      <StatsCards
-        repoCount={totals.repoCount}
-        testCount={totals.testCount}
-        wdioCount={totals.wdioCount}
-        cypressCount={totals.cypressCount}
-        gatedCount={totals.gatedCount}
-      />
+      <StatsCards visible={visibleTotals} total={grandTotals} />
 
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-xs text-gray-400">
-          {visibleRepos.length} repo{visibleRepos.length !== 1 ? 's' : ''} — click a row to view test names
+          {query.trim()
+            ? `${visibleTotals.testCount} test${visibleTotals.testCount !== 1 ? 's' : ''} across ${visibleRepos.length} repo${visibleRepos.length !== 1 ? 's' : ''} match`
+            : `${visibleRepos.length} repo${visibleRepos.length !== 1 ? 's' : ''} — click a row to view test names`}
         </p>
         <div className="flex items-center gap-2 flex-wrap">
           <input

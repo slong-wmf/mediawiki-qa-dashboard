@@ -54,35 +54,39 @@ export default function AutomatedTestsPanel({
 }) {
   const [framework, setFramework] = useState('all');
 
-  const allRepos = useMemo(() => (Array.isArray(data?.repos) ? data.repos : []), [data]);
+  const allRepos = Array.isArray(data?.repos) ? data.repos : [];
 
   const stewardFilteredRepos = useMemo(
     () => filterReposBySteward(allRepos, activeStewards, maintainers),
     [allRepos, activeStewards, maintainers],
   );
 
-  const counts = useMemo(() => ({
-    all:     stewardFilteredRepos.length,
-    wdio:    stewardFilteredRepos.filter((r) => r.framework === 'wdio').length,
-    cypress: stewardFilteredRepos.filter((r) => r.framework === 'cypress').length,
-  }), [stewardFilteredRepos]);
+  const { counts, totals } = useMemo(() => {
+    const c = { all: stewardFilteredRepos.length, wdio: 0, cypress: 0 };
+    let testCount = 0;
+    let gatedCount = 0;
+    for (const r of stewardFilteredRepos) {
+      if (r.framework === 'wdio') c.wdio++;
+      else if (r.framework === 'cypress') c.cypress++;
+      testCount += r.testCount ?? 0;
+      if (r.gatedSelenium) gatedCount++;
+    }
+    return {
+      counts: c,
+      totals: {
+        repoCount: c.all,
+        testCount,
+        wdioCount: c.wdio,
+        cypressCount: c.cypress,
+        gatedCount,
+      },
+    };
+  }, [stewardFilteredRepos]);
 
   const visibleRepos = useMemo(() => {
     if (framework === 'all') return stewardFilteredRepos;
     return stewardFilteredRepos.filter((r) => r.framework === framework);
   }, [stewardFilteredRepos, framework]);
-
-  const totals = useMemo(() => {
-    const testCount = stewardFilteredRepos.reduce((n, r) => n + (r.testCount ?? 0), 0);
-    const gatedCount = stewardFilteredRepos.filter((r) => r.gatedSelenium).length;
-    return {
-      repoCount: stewardFilteredRepos.length,
-      testCount,
-      wdioCount: counts.wdio,
-      cypressCount: counts.cypress,
-      gatedCount,
-    };
-  }, [stewardFilteredRepos, counts]);
 
   if (loading) return <PanelSkeleton />;
   if (error)   return <ErrorBanner source="Automated tests inventory" error={error} />;

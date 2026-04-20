@@ -63,7 +63,10 @@ describe('normaliseEnvelope', () => {
       gatedSelenium: true,
       testCount: 2,
     });
-    expect(result.repos[0].tests).toEqual([{ name: 'test a' }, { name: 'test b' }]);
+    expect(result.repos[0].tests).toEqual([
+      { name: 'test a', daily: false },
+      { name: 'test b', daily: false },
+    ]);
   });
 
   it('normalises an object-of-repos envelope (keyed by name)', () => {

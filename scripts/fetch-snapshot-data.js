@@ -451,9 +451,10 @@ function normaliseTestRepo(raw) {
   if (!name) return null;
   const tests = Array.isArray(raw.tests)
     ? raw.tests
-        .map((t) => (typeof t === 'string' ? { name: t }
-                   : t && typeof t === 'object' && typeof t.name === 'string' ? { name: t.name }
-                   : null))
+        .map((t) => (typeof t === 'string' ? { name: t, daily: false }
+                   : t && typeof t === 'object' && typeof t.name === 'string'
+                     ? { name: t.name, daily: Boolean(t.daily) }
+                     : null))
         .filter(Boolean)
     : [];
   return {

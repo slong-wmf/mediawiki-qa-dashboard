@@ -1,16 +1,25 @@
 # MediaWiki QA Dashboard
 
 A static single-page React dashboard that aggregates MediaWiki project quality metrics
-from three sources — [Wikimedia Jenkins CI](https://integration.wikimedia.org/ci), the
-[doc.wikimedia.org coverage index](https://doc.wikimedia.org/cover-extensions/), and
-[Phabricator Maniphest](https://phabricator.wikimedia.org/maniphest/) — and displays
-them in real-time panels with automatic polling and manual refresh.
+from four sources — [Wikimedia Jenkins CI](https://integration.wikimedia.org/ci), the
+[doc.wikimedia.org coverage index](https://doc.wikimedia.org/cover-extensions/),
+[Phabricator Maniphest](https://phabricator.wikimedia.org/maniphest/), and the
+[browser-test-scanner inventory](https://www.mediawiki.org/wiki/Wikimedia_Quality_Services/Automated_tests_available)
+published on mediawiki.org — and displays them in real-time panels with automatic
+polling and manual refresh.
 
 The **Pass / Fail Rates** panel includes a *Failed jobs* drill-down: click the button
 below the pie chart to expand a per-job breakdown of failures in the past 24 hours —
 failure count, hour-by-hour distribution, a direct link to the most recent failed
 build, and a tail of that build's Jenkins console log. The console tail is lazy-fetched
 from Jenkins on expand and is not available in the static (snapshot) build.
+
+The **Automated Tests Inventory** panel lists every MediaWiki extension repo that
+publishes browser tests, showing framework (WDIO / Cypress), framework version,
+`wdio-mediawiki` version, gated-selenium status, a 7-day daily-job pass/fail tally,
+and the individual test names. Expand a row to see every test; tests that run in the
+repo's daily Jenkins job are tagged `daily`. The panel honours the shared Steward
+filter.
 
 ---
 
@@ -22,7 +31,7 @@ Designed to be run locally via `npm run dev`.
 
 - **Node.js 20.19+ or 22.12+** and **npm** (required by Vite 8)
 - A Phabricator Conduit API token (optional but recommended — raises the rate-limit ceiling)
-- Network access to [`integration.wikimedia.org`](https://integration.wikimedia.org/ci), [`doc.wikimedia.org`](https://doc.wikimedia.org/cover-extensions/), and [`phabricator.wikimedia.org`](https://phabricator.wikimedia.org)
+- Network access to [`integration.wikimedia.org`](https://integration.wikimedia.org/ci), [`doc.wikimedia.org`](https://doc.wikimedia.org/cover-extensions/), [`phabricator.wikimedia.org`](https://phabricator.wikimedia.org), and [`www.mediawiki.org`](https://www.mediawiki.org)
 
 ---
 
@@ -121,12 +130,15 @@ All test files live under `src/test/`.
 | Jenkins service | `src/test/services/jenkins.test.js` | `normaliseStatus`, `extractTestCounts`, `fetchRecentBuilds`, `fetchTrackedJobs` — including partial failure, in-progress build filtering, result sorting, view deduplication, and per-view failure isolation |
 | Coverage service | `src/test/services/coverage.test.js` | `parseRows` (valid HTML, missing elements, edge cases), `fetchCoverageData` (success, HTTP errors, empty page) |
 | Phabricator service | `src/test/services/phabricator.test.js` | `statusGroup`, `mapPriority`, `isSuspectedBug` (all keywords + partial-word avoidance), `shapeTask`, `fetchRecentBugs` (pagination, MAX_PAGES cap, Conduit error codes) |
+| Automated tests service | `src/test/services/automatedTests.test.js` | `normaliseFramework`, `shortRepoName`, `normaliseEnvelope` (array- and object-of-repos shapes, missing fields, per-test `daily` flag preservation, malformed-row resilience) |
 | Data hook | `src/test/hooks/useDashboardData.test.js` | Initial state, per-source error isolation, error recovery on refresh, manual refresh, auto-refresh interval |
 | PassFailPanel | `src/test/components/PassFailPanel.test.jsx` | Loading, error, empty, and data states; Job/Test view toggle; Failed jobs drill-down toggle |
 | FailedJobsDetails | `src/test/components/FailedJobsDetails.test.jsx` | 24h grouping, hourly breakdown, console-tail lazy-load (success / error / static-mode) |
 | CoveragePanel | `src/test/components/CoveragePanel.test.jsx` | Loading, error, null, and data states; Wikipedia filter toggle; null core |
 | ExecutionTimePanel | `src/test/components/ExecutionTimePanel.test.jsx` | Loading, error, empty, and data states; slow-job colour legend |
 | BugsPanel | `src/test/components/BugsPanel.test.jsx` | Loading, error, empty, and data states; priority sort; suspected-bug filter; status card filter; hasMore indicator |
+| AutomatedTestsPanel | `src/test/components/AutomatedTestsPanel.test.jsx` | Loading, error, empty, and data states; framework toggle; stats cards; expandable rows; steward filter (`filterReposBySteward`) |
+| AutomatedTestsPanel (integration) | `src/test/integration/AutomatedTestsPanel.integration.test.jsx` | Hook-contract rendering for loading / error / empty / populated states; end-to-end wiring with the shared Steward filter |
 | Extension data | `src/test/data/activeExtensions.test.js` | Set size, known extensions, alias resolution, case-sensitivity, date format |
 | URL validation | `src/test/urls.test.js` | Every URL in every source and documentation file is syntactically valid; service files use HTTPS only; Vite proxy targets are present and correct; no placeholder text in source URLs |
 

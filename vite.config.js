@@ -33,6 +33,14 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/jenkins/, ''),
       },
+      // MediaWiki index.php raw endpoint (used for pages with JSON content
+      // model, e.g. the browser-test-scanner inventory). action=raw does not
+      // send CORS headers, unlike api.php, so we proxy it.
+      '/api/mw-raw': {
+        target: 'https://www.mediawiki.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/mw-raw/, ''),
+      },
     },
   },
 })

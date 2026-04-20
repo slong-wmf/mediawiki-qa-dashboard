@@ -22,6 +22,7 @@ const LIVE_URL = `/api/mw-raw/w/index.php?title=${encodeURIComponent(JSON_PAGE_T
  * @typedef {Object} AutomatedTestRepo
  * @property {string}  name                 Short extension / project name (e.g. "AbuseFilter")
  * @property {string}  repoPath             Full repo path as emitted by the scanner (may equal name)
+ * @property {string|null} url              Canonical repo URL (Gerrit), when emitted by the scanner
  * @property {'wdio'|'cypress'|'other'} framework
  * @property {string|null} mediawikiVersion
  * @property {string|null} frameworkVersion
@@ -115,6 +116,7 @@ function normaliseRepo(raw) {
   return {
     name,
     repoPath: repoPath || name,
+    url: typeof raw.url === 'string' && raw.url.trim() ? raw.url : null,
     framework: normaliseFramework(raw.framework ?? raw.kind ?? raw.type),
     mediawikiVersion:  typeof raw.mediawikiVersion  === 'string' ? raw.mediawikiVersion  : null,
     frameworkVersion:  typeof raw.frameworkVersion  === 'string' ? raw.frameworkVersion

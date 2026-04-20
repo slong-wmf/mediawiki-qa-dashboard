@@ -47,7 +47,9 @@ describe('normaliseEnvelope', () => {
     const result = normaliseEnvelope({
       generatedAt: '2026-04-17T00:00:00Z',
       repos: [
-        { repo: 'mediawiki/extensions/AbuseFilter', framework: 'wdio', wdioVersion: '6.5.0',
+        { repo: 'mediawiki/extensions/AbuseFilter',
+          url: 'https://gerrit.wikimedia.org/g/mediawiki/extensions/AbuseFilter',
+          framework: 'wdio', wdioVersion: '6.5.0',
           mediawikiVersion: '9.27.0', gatedSelenium: true, tests: ['test a', 'test b'] },
       ],
     });
@@ -57,6 +59,7 @@ describe('normaliseEnvelope', () => {
     expect(result.repos[0]).toMatchObject({
       name: 'AbuseFilter',
       repoPath: 'mediawiki/extensions/AbuseFilter',
+      url: 'https://gerrit.wikimedia.org/g/mediawiki/extensions/AbuseFilter',
       framework: 'wdio',
       frameworkVersion: '6.5.0',
       mediawikiVersion: '9.27.0',
@@ -110,6 +113,7 @@ describe('normaliseEnvelope', () => {
       framework: 'other',
       mediawikiVersion: null,
       frameworkVersion: null,
+      url: null,
       gatedSelenium: false,
       testCount: 0,
       tests: [],

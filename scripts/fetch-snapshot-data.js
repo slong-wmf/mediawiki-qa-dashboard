@@ -460,6 +460,7 @@ function normaliseTestRepo(raw) {
   return {
     name,
     repoPath: repoPath || name,
+    url: typeof raw.url === 'string' && raw.url.trim() ? raw.url : null,
     framework: normaliseTestFramework(raw.framework ?? raw.kind ?? raw.type),
     mediawikiVersion:  typeof raw.mediawikiVersion  === 'string' ? raw.mediawikiVersion  : null,
     frameworkVersion:  typeof raw.frameworkVersion  === 'string' ? raw.frameworkVersion

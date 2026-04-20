@@ -119,7 +119,21 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
                   aria-expanded={isOpen}
                 >
                   <td className="py-1 pr-1 text-gray-500 text-center">{isOpen ? '▾' : '▸'}</td>
-                  <td className="py-1 pr-3 text-blue-400">{repo.name}</td>
+                  <td className="py-1 pr-3">
+                    {repo.url ? (
+                      <a
+                        href={repo.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {repo.name}
+                      </a>
+                    ) : (
+                      <span className="text-blue-400">{repo.name}</span>
+                    )}
+                  </td>
                   <td className={`py-1 pr-3 font-medium ${FRAMEWORK_CLASS[repo.framework] ?? FRAMEWORK_CLASS.other}`}>
                     {FRAMEWORK_LABEL[repo.framework] ?? FRAMEWORK_LABEL.other}
                   </td>

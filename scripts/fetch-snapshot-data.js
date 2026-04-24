@@ -2,28 +2,40 @@
 /**
  * @file scripts/fetch-snapshot-data.js
  *
- * Server-side data fetcher for the GitHub Pages static build.
+ * Server-side data fetcher for the dashboard.
  *
- * This script runs in GitHub Actions (no CORS restrictions) and calls all
- * four external APIs that the browser cannot access directly. It produces
- * pre-shaped JSON files that mirror the exact return shapes of the client
- * service functions, so the frontend can swap seamlessly between live API
- * calls and static JSON reads.
+ * Runs in two contexts:
+ *   1. Local / GitHub Actions — defaults to writing into <repo>/snapshot-data/
+ *      so `npm run build` and the Pages workflow keep working unchanged.
+ *   2. Toolforge cron job — SNAPSHOT_OUTPUT_DIR env var points at the NFS
+ *      directory the webservice serves from (e.g.
+ *      /data/project/mw-qa-dashboard/snapshot-data). The job's container cwd
+ *      is /workspace (ephemeral), so an explicit path is required to land
+ *      output where the webservice can read it.
  *
- * Output directory: ./snapshot-data/
- * The GitHub Actions workflow copies this to dist/data/ after the Vite build.
+ * Calls all four external APIs that the browser cannot access directly and
+ * produces pre-shaped JSON files mirroring the exact return shapes of the
+ * client service functions, so the frontend can swap seamlessly between
+ * live API calls and static JSON reads.
  *
  * Usage:
  *   node scripts/fetch-snapshot-data.js
  *
  * Environment variables (all optional):
- *   PHABRICATOR_TOKEN   — Conduit API token (raises rate limit ceiling)
+ *   PHABRICATOR_TOKEN     — Conduit API token (raises rate limit ceiling)
+ *   SNAPSHOT_OUTPUT_DIR   — absolute path to write JSON files into
+ *                           (default: <repo>/snapshot-data)
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseHTML } from 'linkedom';
 
-const OUT_DIR = './snapshot-data';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const OUT_DIR = process.env.SNAPSHOT_OUTPUT_DIR
+  ? path.resolve(process.env.SNAPSHOT_OUTPUT_DIR)
+  : path.resolve(__dirname, '..', 'snapshot-data');
 mkdirSync(OUT_DIR, { recursive: true });
 
 // ── Retry helper ──────────────────────────────────────────────────────────────
@@ -104,8 +116,8 @@ const STATUS_LABELS = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function save(filename, data) {
-  const path = `${OUT_DIR}/${filename}`;
-  writeFileSync(path, JSON.stringify(data));
+  const outPath = path.join(OUT_DIR, filename);
+  writeFileSync(outPath, JSON.stringify(data));
   console.log(`  ✓ ${filename} (${Buffer.byteLength(JSON.stringify(data))} bytes)`);
 }
 
@@ -544,7 +556,7 @@ async function fetchMaintainers() {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('🚀 Fetching snapshot data for GitHub Pages build...');
+  console.log('🚀 Fetching snapshot data...');
   console.log(`   Output: ${OUT_DIR}/`);
   if (PHAB_TOKEN) console.log('   Phabricator token: provided');
   else             console.log('   Phabricator token: not set (using anonymous rate limit)');

@@ -170,6 +170,78 @@ file so a failure tells you exactly which file and URL is broken.
 
 ---
 
+## Deployment (Wikimedia Toolforge)
+
+Production hosting lives on [Wikimedia Toolforge](https://wikitech.wikimedia.org/wiki/Help:Toolforge)
+as the tool **`mw-qa-dashboard`**, served at https://mw-qa-dashboard.toolforge.org/.
+GitHub Pages remains live in parallel during cutover and will be retired in a follow-up PR.
+
+**Architecture**:
+- Toolforge's [Build Service](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Build_Service)
+  clones this repo, runs Cloud Native Buildpacks (Heroku Node.js buildpack) to install
+  dependencies and run `npm run build`, then bakes the result into a container image.
+- The webservice runs `node server.js` (per `Procfile`), which serves the Vite output
+  from `dist/` and JSON snapshots from `$HOME/snapshot-data/`.
+- A scheduled [Toolforge Job](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Jobs_framework)
+  re-runs `scripts/fetch-snapshot-data.js` every 6 hours to refresh snapshots
+  without rebuilding the app.
+
+**One-time setup** (run from a workstation with SSH access to Toolforge):
+
+```bash
+ssh <shell-user>@login.toolforge.org
+become mw-qa-dashboard
+
+# Secrets and snapshot paths
+toolforge envvars create PHABRICATOR_TOKEN     # paste token when prompted
+toolforge envvars create SNAPSHOT_OUTPUT_DIR /data/project/mw-qa-dashboard/snapshot-data
+toolforge envvars create SNAPSHOT_DIR        /data/project/mw-qa-dashboard/snapshot-data
+
+# Build the image from GitHub
+toolforge build start https://github.com/slong-wmf/mediawiki-qa-dashboard --ref main
+
+# Seed snapshot data so the site has something to serve on first hit
+mkdir -p $HOME/snapshot-data
+toolforge jobs run snapshot-seed \
+  --command "node scripts/fetch-snapshot-data.js" \
+  --image tool-mw-qa-dashboard/tool-mw-qa-dashboard:latest \
+  --wait
+
+# Schedule the recurring refresh (every 6 h)
+toolforge jobs run snapshot-refresh \
+  --command "node scripts/fetch-snapshot-data.js" \
+  --image tool-mw-qa-dashboard/tool-mw-qa-dashboard:latest \
+  --schedule "0 */6 * * *" \
+  --emails onfailure
+
+# Start the webservice
+toolforge webservice buildservice start
+```
+
+**Releasing a new version** (after merging to `main`):
+
+```bash
+toolforge build start https://github.com/slong-wmf/mediawiki-qa-dashboard --ref main
+toolforge webservice buildservice restart
+```
+
+**Operational commands**:
+
+| Command | Purpose |
+|---|---|
+| `toolforge build logs` | View the most recent build output |
+| `toolforge webservice logs` | Tail the running webservice's stdout/stderr |
+| `toolforge webservice status` | Show whether the webservice is running |
+| `toolforge jobs list` | List scheduled / running jobs |
+| `toolforge jobs logs snapshot-refresh` | Inspect the last snapshot-refresh run |
+| `toolforge envvars list` | Show configured secrets/env (values redacted) |
+
+The server reads `process.env.PORT` (Toolforge sets `8000` on Kubernetes), `DIST_DIR`
+(default `./dist`), and `SNAPSHOT_DIR` (default `./snapshot-data`). Run locally with
+`npm run build && npm start` to smoke-test the production server before deploying.
+
+---
+
 ## Further Reading
 
 - [About](docs/about.md) — dependencies, frameworks, coding methodologies, and testing strategy

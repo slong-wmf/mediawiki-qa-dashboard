@@ -4,10 +4,11 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // When building for GitHub Pages (VITE_STATIC_DATA=true), set the base path
-  // to the repository name so asset URLs resolve correctly under the subdirectory.
-  // In dev and Vercel deployments the base stays at '/' (the default).
-  base: process.env.VITE_STATIC_DATA === 'true' ? '/mediawiki-qa-dashboard/' : '/',
+  // App is served from the domain root on Toolforge
+  // (https://mw-qa-dashboard.toolforge.org/), so assets resolve at '/'.
+  // VITE_STATIC_DATA still gates client-side static-vs-live data behaviour,
+  // independent of the base path.
+  base: '/',
   test: {
     environment: 'jsdom',
     globals: true,

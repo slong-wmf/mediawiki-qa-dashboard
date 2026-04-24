@@ -197,32 +197,41 @@ toolforge envvars create PHABRICATOR_TOKEN     # paste token when prompted
 toolforge envvars create SNAPSHOT_OUTPUT_DIR /data/project/mw-qa-dashboard/snapshot-data
 toolforge envvars create SNAPSHOT_DIR        /data/project/mw-qa-dashboard/snapshot-data
 
-# Build the image from GitHub
+# Build the image from GitHub. The build script bakes VITE_STATIC_DATA=true
+# into the bundle so the frontend reads from /data/*.json at runtime.
 toolforge build start https://github.com/slong-wmf/mediawiki-qa-dashboard --ref main
 
-# Seed snapshot data so the site has something to serve on first hit
+# Seed snapshot data so the site has something to serve on first hit.
+# --mount=all  exposes the tool's NFS $HOME inside the job container so
+#              SNAPSHOT_OUTPUT_DIR can actually be written.
+# --filelog    writes stdout/stderr to ~/snapshot-seed.{out,err} for debugging.
 mkdir -p $HOME/snapshot-data
 toolforge jobs run snapshot-seed \
   --command "node scripts/fetch-snapshot-data.js" \
   --image tool-mw-qa-dashboard/tool-mw-qa-dashboard:latest \
+  --mount=all \
+  --filelog \
   --wait
 
-# Schedule the recurring refresh (every 6 h)
+# Schedule the recurring refresh (every 6 h) — same flags as the seed job.
 toolforge jobs run snapshot-refresh \
   --command "node scripts/fetch-snapshot-data.js" \
   --image tool-mw-qa-dashboard/tool-mw-qa-dashboard:latest \
+  --mount=all \
+  --filelog \
   --schedule "0 */6 * * *" \
   --emails onfailure
 
-# Start the webservice
-toolforge webservice buildservice start
+# Start the webservice. --mount=all is required so server.js can read
+# snapshots from the NFS-mounted SNAPSHOT_DIR.
+toolforge webservice buildservice start --mount=all
 ```
 
 **Releasing a new version** (after merging to `main`):
 
 ```bash
 toolforge build start https://github.com/slong-wmf/mediawiki-qa-dashboard --ref main
-toolforge webservice buildservice restart
+toolforge webservice buildservice restart --mount=all
 ```
 
 **Operational commands**:

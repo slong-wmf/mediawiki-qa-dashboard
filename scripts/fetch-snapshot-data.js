@@ -23,6 +23,10 @@
  *
  * Environment variables (all optional):
  *   PHABRICATOR_TOKEN     — Conduit API token (raises rate limit ceiling)
+ *   GITHUB_TOKEN          — GitHub PAT for the mobile-apps fetchers; raises
+ *                           the rate limit from 60 req/hr (anon) to 5000 req/hr.
+ *                           A no-scope classic PAT or a fine-grained PAT with
+ *                           "Public repositories (read-only)" both work.
  *   SNAPSHOT_OUTPUT_DIR   — absolute path to write JSON files into
  *                           (default: <repo>/snapshot-data)
  */
@@ -84,6 +88,31 @@ const MAX_PAGES       = 2;
 const BUILDS_PER_JOB  = 20;
 const JENKINS_VIEWS   = ['Selenium', 'selenium-daily'];
 const TRAIN_PHID      = 'PHID-PROJ-fmcvjrkfvvzz3gxavs3a';
+
+// GitHub mobile-app fetchers. Output shapes match
+// src/services/github/{workflows,releases,testInventory}.js exactly so the
+// frontend swaps seamlessly between live API calls and these snapshots.
+const GITHUB_API_BASE = 'https://api.github.com';
+const GITHUB_TOKEN    = process.env.GITHUB_TOKEN ?? '';
+const GITHUB_REPOS = {
+  ios:     { fullName: 'wikimedia/wikipedia-ios',          owner: 'wikimedia', name: 'wikipedia-ios' },
+  android: { fullName: 'wikimedia/apps-android-wikipedia', owner: 'wikimedia', name: 'apps-android-wikipedia' },
+};
+
+// Mirrors MATCHERS in src/services/github/testInventory.js. Duplicated rather
+// than imported to keep this script self-contained — its existing style is to
+// inline small lookup tables. If either repo reorganises its test directories,
+// update both copies.
+const GITHUB_TEST_MATCHERS = {
+  ios: [
+    { kind: 'ui',   prefix: 'WikipediaUITests/',   exts: ['.swift'] },
+    { kind: 'unit', prefix: 'WikipediaUnitTests/', exts: ['.swift'] },
+  ],
+  android: [
+    { kind: 'ui',   prefix: 'app/src/androidTest/', exts: ['.kt', '.java'] },
+    { kind: 'unit', prefix: 'app/src/test/',        exts: ['.kt', '.java'] },
+  ],
+};
 
 const CLOSED_STATUSES = new Set([
   'resolved', 'declined', 'invalid', 'wontfix', 'spite', 'duplicate',
@@ -553,6 +582,183 @@ async function fetchMaintainers() {
   return result;
 }
 
+// ── GitHub (mobile apps) ─────────────────────────────────────────────────────
+
+function ghHeaders() {
+  return {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    ...(GITHUB_TOKEN ? { Authorization: `Bearer ${GITHUB_TOKEN}` } : {}),
+  };
+}
+
+// The four functions below (normalizeRun, aggregateByWorkflow,
+// normalizeRelease, lastReleaseAgeDays, buildTestInventory) intentionally
+// mirror their src/services/github/* counterparts byte-for-byte so the
+// snapshot JSON has the exact shape the live service would return. Keep
+// them in sync if either side changes.
+
+function normalizeRun(raw) {
+  const start = raw.run_started_at ?? raw.created_at;
+  const end = raw.updated_at;
+  let duration_ms = null;
+  if (start && end) {
+    const startMs = Date.parse(start);
+    const endMs = Date.parse(end);
+    if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) {
+      duration_ms = endMs - startMs;
+    }
+  }
+  return {
+    id: raw.id,
+    name: raw.name ?? '(unnamed workflow)',
+    status: raw.status ?? 'unknown',
+    conclusion: raw.conclusion ?? null,
+    created_at: raw.created_at,
+    run_started_at: raw.run_started_at ?? null,
+    updated_at: raw.updated_at,
+    html_url: raw.html_url,
+    head_branch: raw.head_branch ?? null,
+    event: raw.event ?? null,
+    run_attempt: raw.run_attempt ?? 1,
+    duration_ms,
+  };
+}
+
+function aggregateByWorkflow(runs) {
+  const acc = {};
+  for (const run of runs) {
+    const key = run.name;
+    if (!acc[key]) acc[key] = { n: 0, passed: 0, failed: 0, totalDurationMs: 0, durationCount: 0 };
+    const bucket = acc[key];
+    bucket.n += 1;
+    if (run.conclusion === 'success') bucket.passed += 1;
+    else if (run.conclusion === 'failure' || run.conclusion === 'timed_out') bucket.failed += 1;
+    if (typeof run.duration_ms === 'number') {
+      bucket.totalDurationMs += run.duration_ms;
+      bucket.durationCount += 1;
+    }
+  }
+  const out = {};
+  for (const [name, bucket] of Object.entries(acc)) {
+    out[name] = {
+      n: bucket.n,
+      passed: bucket.passed,
+      failed: bucket.failed,
+      avgDurationMs: bucket.durationCount > 0
+        ? Math.round(bucket.totalDurationMs / bucket.durationCount)
+        : null,
+    };
+  }
+  return out;
+}
+
+function normalizeRelease(raw) {
+  return {
+    id: raw.id,
+    tag_name: raw.tag_name ?? '',
+    name: raw.name ?? raw.tag_name ?? '(untitled)',
+    published_at: raw.published_at ?? null,
+    author: raw.author?.login ?? null,
+    html_url: raw.html_url ?? '',
+    prerelease: Boolean(raw.prerelease),
+    draft: Boolean(raw.draft),
+  };
+}
+
+function lastReleaseAgeDays(releases, now = new Date()) {
+  const published = releases
+    .filter((r) => !r.draft && r.published_at)
+    .map((r) => Date.parse(r.published_at))
+    .filter((t) => Number.isFinite(t));
+  if (published.length === 0) return null;
+  const newest = Math.max(...published);
+  const diffMs = now.getTime() - newest;
+  return Math.max(0, Math.floor(diffMs / 86_400_000));
+}
+
+function buildTestInventory(treeResponse, platform, repoFullName, now = new Date()) {
+  const matchers = GITHUB_TEST_MATCHERS[platform];
+  if (!matchers) throw new Error(`No test matchers for platform: ${platform}`);
+  const tree = Array.isArray(treeResponse?.tree) ? treeResponse.tree : [];
+
+  let uiTests = 0;
+  let unitTests = 0;
+  const byDir = new Map();
+
+  for (const entry of tree) {
+    if (entry.type !== 'blob') continue;
+    const path = entry.path;
+    if (typeof path !== 'string') continue;
+
+    for (const rule of matchers) {
+      if (!path.startsWith(rule.prefix)) continue;
+      if (!rule.exts.some((ext) => path.endsWith(ext))) continue;
+
+      if (rule.kind === 'ui') uiTests += 1;
+      else if (rule.kind === 'unit') unitTests += 1;
+
+      const lastSlash = path.lastIndexOf('/');
+      const dir = lastSlash > 0 ? path.slice(0, lastSlash) : path;
+      const existing = byDir.get(dir);
+      if (existing) existing.count += 1;
+      else byDir.set(dir, { count: 1, kind: rule.kind });
+      break;
+    }
+  }
+
+  const byDirectory = [...byDir.entries()]
+    .map(([path, { count, kind }]) => ({ path, count, kind }))
+    .sort((a, b) => b.count - a.count || a.path.localeCompare(b.path));
+
+  return {
+    repo: repoFullName,
+    generatedAt: now.toISOString(),
+    totals: { uiTests, unitTests, total: uiTests + unitTests },
+    byDirectory,
+  };
+}
+
+async function fetchGitHubWorkflowRuns(repo, limit = 30) {
+  const url = `${GITHUB_API_BASE}/repos/${repo.owner}/${repo.name}/actions/runs?per_page=${limit}`;
+  const res = await fetchWithRetry(url, { headers: ghHeaders() });
+  if (!res.ok) throw new Error(`GitHub Actions runs (${repo.fullName}): ${res.status} ${res.statusText}`);
+  const json = await res.json();
+  const runs = Array.isArray(json.workflow_runs) ? json.workflow_runs.map(normalizeRun) : [];
+  return {
+    runs,
+    byWorkflow: aggregateByWorkflow(runs),
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+async function fetchGitHubReleases(repo, limit = 10) {
+  const url = `${GITHUB_API_BASE}/repos/${repo.owner}/${repo.name}/releases?per_page=${limit}`;
+  const res = await fetchWithRetry(url, { headers: ghHeaders() });
+  if (!res.ok) throw new Error(`GitHub Releases (${repo.fullName}): ${res.status} ${res.statusText}`);
+  const json = await res.json();
+  const releases = Array.isArray(json) ? json.map(normalizeRelease) : [];
+  return {
+    releases,
+    lastReleaseAgeDays: lastReleaseAgeDays(releases),
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+async function fetchGitHubTestInventory(repo, platform) {
+  const url = `${GITHUB_API_BASE}/repos/${repo.owner}/${repo.name}/git/trees/HEAD?recursive=1`;
+  const res = await fetchWithRetry(url, { headers: ghHeaders() });
+  if (!res.ok) throw new Error(`GitHub repo tree (${repo.fullName}): ${res.status} ${res.statusText}`);
+  const json = await res.json();
+  if (json.truncated) {
+    // GitHub caps the recursive tree at ~100k entries. Both target repos are
+    // far smaller, but warn loudly if it ever happens so counts aren't
+    // silently undercounted.
+    console.warn(`  ⚠ ${repo.fullName} tree was truncated by GitHub — counts may be incomplete`);
+  }
+  return buildTestInventory(json, platform, repo.fullName);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -560,6 +766,8 @@ async function main() {
   console.log(`   Output: ${OUT_DIR}/`);
   if (PHAB_TOKEN) console.log('   Phabricator token: provided');
   else             console.log('   Phabricator token: not set (using anonymous rate limit)');
+  if (GITHUB_TOKEN) console.log('   GitHub token: provided (5000 req/hr quota)');
+  else              console.log('   GitHub token: not set (anonymous 60 req/hr quota — fine for 6 calls)');
 
   const errors = [];
 
@@ -625,6 +833,48 @@ async function main() {
     console.error(`  ✗ Automated tests failed: ${err.message}`);
     errors.push('automated-tests');
     save('automated-tests.json', { generatedAt: null, repoCount: 0, testCount: 0, repos: [] });
+  }
+
+  // GitHub mobile apps — three endpoints per platform. Each call wrapped in
+  // its own try/catch so a failure on one source doesn't blank the others
+  // (matches the per-source isolation pattern Jenkins/Phabricator use above).
+  console.log('\n📦 GitHub: fetching mobile-app data...');
+  for (const [platform, repo] of Object.entries(GITHUB_REPOS)) {
+    try {
+      const data = await fetchGitHubWorkflowRuns(repo);
+      save(`${platform}-workflows.json`, data);
+    } catch (err) {
+      console.error(`  ✗ ${platform} workflows failed: ${err.message}`);
+      errors.push(`${platform}-workflows`);
+      save(`${platform}-workflows.json`, {
+        runs: [], byWorkflow: {}, fetchedAt: new Date().toISOString(),
+      });
+    }
+
+    try {
+      const data = await fetchGitHubReleases(repo);
+      save(`${platform}-releases.json`, data);
+    } catch (err) {
+      console.error(`  ✗ ${platform} releases failed: ${err.message}`);
+      errors.push(`${platform}-releases`);
+      save(`${platform}-releases.json`, {
+        releases: [], lastReleaseAgeDays: null, fetchedAt: new Date().toISOString(),
+      });
+    }
+
+    try {
+      const data = await fetchGitHubTestInventory(repo, platform);
+      save(`${platform}-test-inventory.json`, data);
+    } catch (err) {
+      console.error(`  ✗ ${platform} test inventory failed: ${err.message}`);
+      errors.push(`${platform}-test-inventory`);
+      save(`${platform}-test-inventory.json`, {
+        repo: repo.fullName,
+        generatedAt: new Date().toISOString(),
+        totals: { uiTests: 0, unitTests: 0, total: 0 },
+        byDirectory: [],
+      });
+    }
   }
 
   // Metadata

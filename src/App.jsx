@@ -1,14 +1,24 @@
-import { useState, useMemo, useCallback } from 'react';
+/**
+ * Root dashboard component. Owns the top-level tab state (web / iOS / Android),
+ * synced two-ways with the URL hash for deep-linking, bookmarking, and the
+ * browser back button — no router library needed for a 3-way switch.
+ *
+ * The Web tab's data hook (`useDashboardData`) is lifted here so the header
+ * can show the last-refreshed timestamp and drive the global Refresh button
+ * without WebTab having to duplicate the call. The mobile tabs own their own
+ * `useMobileData` calls inside MobileTab so a failure on one platform does
+ * not affect the others.
+ *
+ * Each non-Web tab is mounted lazily on its first visit and then stays
+ * mounted (hidden via CSS) so the platform's initial fetch fires only once
+ * per session and a tab switch never re-fetches.
+ */
+
+import { useState, useEffect } from 'react';
 import { useDashboardData } from './hooks/useDashboardData.js';
-import { Panel } from './components/shared/Panel.jsx';
-import PassFailPanel from './components/PassFailPanel.jsx';
-import CoveragePanel from './components/CoveragePanel.jsx';
-import ExecutionTimePanel from './components/ExecutionTimePanel.jsx';
-import BugsPanel from './components/BugsPanel.jsx';
-import TrainBlockersPanel from './components/TrainBlockersPanel.jsx';
-import AutomatedTestsPanel from './components/AutomatedTestsPanel.jsx';
-import { StewardFilter } from './components/CoveragePanel/StewardFilter.jsx';
-import { uniqueStewards } from './services/maintainers.js';
+import { TabBar, TABS } from './components/tabs/TabBar.jsx';
+import { WebTab } from './components/tabs/WebTab.jsx';
+import { MobileTab } from './components/tabs/MobileTab.jsx';
 import { USE_STATIC_DATA } from './services/staticData.js';
 
 /**
@@ -20,48 +30,71 @@ function formatTime(date) {
 }
 
 /**
- * Root dashboard component. Owns data fetching and passes slices to each panel.
+ * Read the active tab from `window.location.hash`. Falls back to the first
+ * tab in TABS when the hash is missing, malformed, or names an unknown tab.
  */
+function readTabFromHash() {
+  if (typeof window === 'undefined') return TABS[0];
+  const h = window.location.hash.replace(/^#\/?/, '');
+  return TABS.includes(h) ? h : TABS[0];
+}
+
 export default function App() {
-  const {
-    builds,
-    jenkinsFailedJobs,
-    coverage,
-    bugs,
-    trainBlockers,
-    maintainers,
-    automatedTests,
-    lastRefreshed,
-    loading,
-    initialLoading,
-    jenkinsLoading,
-    errors,
-    refresh,
-    refreshJobList,
-    jobListLoading,
-    jobListError,
-  } = useDashboardData();
+  // Web tab data is lifted to App so the header (last-refreshed, Refresh
+  // button) can use it without WebTab having to call useDashboardData
+  // separately and double-fetch.
+  const dashboardData = useDashboardData();
+  const { lastRefreshed, loading, refresh } = dashboardData;
+
+  // Active tab kept in sync with `window.location.hash` (e.g. `#/ios`).
+  const [activeTab, setActiveTab] = useState(readTabFromHash);
+
+  // Track which non-Web tabs have been visited so we can mount them lazily
+  // (avoid burning GitHub API quota for platforms the user never opens) but
+  // keep them mounted afterwards so their data hooks don't re-fetch on tab
+  // switch. Web is implicitly always-mounted because its data is already
+  // fetched at App level for the header.
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set([activeTab]));
+  useEffect(() => {
+    setVisitedTabs((prev) => (prev.has(activeTab) ? prev : new Set(prev).add(activeTab)));
+  }, [activeTab]);
+
+  // Push activeTab → URL hash. Guard against unnecessary writes so we don't
+  // trigger our own hashchange listener and create a feedback loop.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const desired = `#/${activeTab}`;
+    if (window.location.hash !== desired) {
+      window.location.hash = `/${activeTab}`;
+    }
+  }, [activeTab]);
+
+  // Pull URL hash → activeTab so back/forward and manual hash edits work.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onHash = () => {
+      const next = readTabFromHash();
+      setActiveTab((curr) => (curr === next ? curr : next));
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
   const refreshIntervalMin = Math.round(
     (Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 3_600_000) / 60_000,
   );
 
-  // Shared steward filter — narrows both Pass/Fail Rates and Code Coverage.
-  const [activeStewards, setActiveStewards] = useState([]);
-  const stewardList = useMemo(
-    () => (maintainers instanceof Map ? uniqueStewards(maintainers) : []),
-    [maintainers],
-  );
-  const handleStewardChange = useCallback((next) => setActiveStewards(next), []);
-
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
 
       {/* ── Header ── */}
-      <header className="bg-gray-950 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold tracking-tight text-white">
-          MediaWiki Testing Dashboard
-        </h1>
+      <header className="bg-gray-950 border-b border-gray-700 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-4 flex-wrap">
+          <h1 className="text-xl font-bold tracking-tight text-white">
+            MediaWiki Testing Dashboard
+          </h1>
+          <TabBar activeTab={activeTab} onChange={setActiveTab} />
+        </div>
         <div className="flex items-center gap-4 text-sm text-gray-400">
           <span>
             Last refreshed:{' '}
@@ -80,7 +113,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* ── Snapshot notice (GitHub Pages static build only) ── */}
+      {/* ── Snapshot notice (GitHub Pages / Toolforge static build only) ── */}
       {USE_STATIC_DATA && (
         <div className="bg-amber-900/40 border-b border-amber-700/50 px-6 py-2 text-xs text-amber-300 flex items-center gap-2">
           <span>⚡</span>
@@ -91,155 +124,48 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Main panels ── */}
+      {/* ── Tab panels ──
+          Each panel renders into a `role="tabpanel"` wrapper that stays in
+          the DOM once mounted; hidden ones get `display:none` via Tailwind's
+          `hidden` class so React state and the platform's data hook are
+          preserved across tab switches. */}
       <main className="flex-1 p-6">
-
-        {/* Shared steward filter wraps Pass/Fail Rates, Code Coverage, and
-            the Automated Tests inventory. The dropdown in this header applies
-            to all three enclosed panels. */}
-        <section
-          aria-label="Pass/Fail, Code Coverage, and Automated Tests"
-          className="rounded border border-gray-700 bg-gray-800/40 p-4"
+        <div
+          role="tabpanel"
+          id="tabpanel-web"
+          aria-labelledby="tab-web"
+          hidden={activeTab !== 'web'}
+          className={activeTab === 'web' ? '' : 'hidden'}
         >
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-            <h2 className="text-sm font-semibold text-gray-200 uppercase tracking-wide">
-              Pass / Fail, Coverage &amp; Automated Tests
-            </h2>
-            <StewardFilter
-              maintainers={maintainers}
-              maintainersError={errors.maintainers}
-              stewardList={stewardList}
-              activeStewards={activeStewards}
-              onChange={handleStewardChange}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Panel
-              title="Pass / Fail Rates"
-              loading={initialLoading || jenkinsLoading}
-              error={errors.jenkins}
-              source="Jenkins"
-              action={
-                <>
-                  {jobListError && (
-                    <span
-                      className="text-xs text-red-400"
-                      title={jobListError.message}
-                    >
-                      Fetch failed
-                    </span>
-                  )}
-                  <button
-                    onClick={refreshJobList}
-                    disabled={jobListLoading || loading || jenkinsLoading}
-                    className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600
-                               disabled:opacity-50 text-gray-300 rounded transition-colors"
-                  >
-                    {jobListLoading ? 'Fetching…' : 'Fetch Job Information'}
-                  </button>
-                </>
-              }
-            >
-              {jenkinsFailedJobs?.length > 0 && !errors.jenkins && (
-                <div
-                  className="mb-3 rounded border border-amber-700/60 bg-amber-900/20 px-3 py-2 text-xs text-amber-300"
-                  title={jenkinsFailedJobs.map((j) => `${j.label}: ${j.error}`).join('\n')}
-                >
-                  <span className="font-medium">Partial data:</span>{' '}
-                  {jenkinsFailedJobs.length} job{jenkinsFailedJobs.length !== 1 ? 's' : ''} failed to load
-                  ({jenkinsFailedJobs.slice(0, 3).map((j) => j.label).join(', ')}
-                  {jenkinsFailedJobs.length > 3 ? `, +${jenkinsFailedJobs.length - 3} more` : ''})
-                </div>
-              )}
-              <PassFailPanel
-                builds={builds}
-                error={errors.jenkins}
-                loading={initialLoading || jenkinsLoading}
-                activeStewards={activeStewards}
-                maintainers={maintainers}
-              />
-            </Panel>
-
-            <Panel
-              title="Code Coverage"
-              loading={initialLoading}
-              error={errors.coverage}
-              source="Coverage index"
-            >
-              <CoveragePanel
-                coverage={coverage}
-                error={errors.coverage}
-                loading={initialLoading}
-                maintainers={maintainers}
-                activeStewards={activeStewards}
-              />
-            </Panel>
-          </div>
-
-          <div className="mt-6">
-            <Panel
-              title="Automated Tests Inventory"
-              loading={initialLoading}
-              error={errors.automatedTests}
-              source="browser-test-scanner"
-            >
-              <AutomatedTestsPanel
-                data={automatedTests}
-                error={null}
-                loading={initialLoading}
-                maintainers={maintainers}
-                activeStewards={activeStewards}
-              />
-            </Panel>
-          </div>
-        </section>
-
-        {/* Job Total Time — outside the steward wrapper so it remains unaffected. */}
-        <div className="mt-6">
-          <Panel
-            title="Job Total Time"
-            loading={initialLoading || jenkinsLoading}
-            error={errors.jenkins}
-            source="Jenkins"
-          >
-            <ExecutionTimePanel builds={builds} error={errors.jenkins} loading={initialLoading || jenkinsLoading} />
-          </Panel>
+          <WebTab data={dashboardData} />
         </div>
 
-        {/* ── Bugs row (full width) ── */}
-        <div className="mt-6">
-          <Panel
-            title="Active Bugs · Past 7 Days"
-            loading={initialLoading}
-            error={errors.phabricator}
-            source="Phabricator"
-          >
-            <BugsPanel bugs={bugs} error={errors.phabricator} loading={initialLoading} />
-          </Panel>
+        <div
+          role="tabpanel"
+          id="tabpanel-ios"
+          aria-labelledby="tab-ios"
+          hidden={activeTab !== 'ios'}
+          className={activeTab === 'ios' ? '' : 'hidden'}
+        >
+          {visitedTabs.has('ios') && <MobileTab platform="ios" />}
         </div>
 
-        {/* ── Train blockers row (full width) ── */}
-        <div className="mt-6">
-          <Panel
-            title="Train Blockers · Previous Release"
-            loading={initialLoading}
-            error={errors.trainBlockers}
-            source="Phabricator"
-          >
-            <TrainBlockersPanel
-              trainBlockers={trainBlockers}
-              error={errors.trainBlockers}
-              loading={initialLoading}
-            />
-          </Panel>
+        <div
+          role="tabpanel"
+          id="tabpanel-android"
+          aria-labelledby="tab-android"
+          hidden={activeTab !== 'android'}
+          className={activeTab === 'android' ? '' : 'hidden'}
+        >
+          {visitedTabs.has('android') && <MobileTab platform="android" />}
         </div>
-
       </main>
 
       {/* ── Footer ── */}
       <footer className="bg-gray-950 border-t border-gray-700 px-6 py-3 text-xs text-gray-500 flex items-center justify-between">
-        <span>Data sources: Jenkins · doc.wikimedia.org · Phabricator · browser-test-scanner</span>
+        <span>
+          Data sources: Jenkins · doc.wikimedia.org · Phabricator · browser-test-scanner · GitHub Actions / Releases
+        </span>
         <span>Refresh interval: {refreshIntervalMin} min</span>
       </footer>
 

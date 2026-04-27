@@ -26,7 +26,12 @@ const SOURCE_FILES = [
   'src/services/jenkins.js',
   'src/services/coverage.js',
   'src/services/phabricator.js',
+  'src/services/github/repos.js',
+  'src/services/github/workflows.js',
+  'src/services/github/releases.js',
+  'src/services/github/testInventory.js',
   'src/hooks/useDashboardData.js',
+  'src/hooks/useMobileData.js',
   'src/data/activeExtensions.js',
   'src/App.jsx',
   'src/main.jsx',
@@ -34,6 +39,12 @@ const SOURCE_FILES = [
   'src/components/CoveragePanel.jsx',
   'src/components/ExecutionTimePanel.jsx',
   'src/components/BugsPanel.jsx',
+  'src/components/tabs/TabBar.jsx',
+  'src/components/tabs/WebTab.jsx',
+  'src/components/tabs/MobileTab.jsx',
+  'src/components/mobile/MobileWorkflowsPanel.jsx',
+  'src/components/mobile/MobileReleasesPanel.jsx',
+  'src/components/mobile/MobileTestInventoryPanel.jsx',
   'vite.config.js',
   'index.html',
 ];
@@ -114,6 +125,10 @@ describe('HTTPS enforcement', () => {
     'src/services/jenkins.js',
     'src/services/coverage.js',
     'src/services/phabricator.js',
+    'src/services/github/repos.js',
+    'src/services/github/workflows.js',
+    'src/services/github/releases.js',
+    'src/services/github/testInventory.js',
   ];
 
   it.each(SERVICE_FILES)('all URLs in %s use HTTPS (not plain HTTP)', (file) => {
@@ -178,6 +193,20 @@ describe('Known hardcoded public URLs', () => {
     const content = readFile('src/components/BugsPanel.jsx');
     expect(content).toContain('https://phabricator.wikimedia.org/maniphest/');
     expect(() => new URL('https://phabricator.wikimedia.org/maniphest/')).not.toThrow();
+  });
+
+  it('GITHUB_API_BASE in github/repos.js is the canonical https://api.github.com', () => {
+    const content = readFile('src/services/github/repos.js');
+    expect(content).toContain('https://api.github.com');
+    expect(() => new URL('https://api.github.com')).not.toThrow();
+  });
+
+  it('GitHub repo htmlUrls in github/repos.js are valid HTTPS URLs', () => {
+    const content = readFile('src/services/github/repos.js');
+    expect(content).toContain('https://github.com/wikimedia/wikipedia-ios');
+    expect(content).toContain('https://github.com/wikimedia/apps-android-wikipedia');
+    expect(() => new URL('https://github.com/wikimedia/wikipedia-ios')).not.toThrow();
+    expect(() => new URL('https://github.com/wikimedia/apps-android-wikipedia')).not.toThrow();
   });
 });
 

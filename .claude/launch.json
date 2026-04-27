@@ -18,6 +18,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "/tmp/preview-site", "--no-clipboard", "-l", "4174"],
       "port": 4174
+    },
+    {
+      "name": "Static Server (snapshot data)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 8000
     }
   ]
 }

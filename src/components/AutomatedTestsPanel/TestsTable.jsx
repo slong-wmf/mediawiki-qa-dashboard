@@ -15,18 +15,31 @@ function DailyCell({ jobs }) {
           );
         }
         const allPass = j.passes === j.total;
-        const colour = allPass ? 'text-emerald-300' : 'text-rose-300';
+        const countColour = allPass ? 'text-emerald-300' : 'text-rose-300';
+        const results = Array.isArray(j.results) ? j.results : [];
         return (
           <a
             key={j.name}
             href={j.url}
             target="_blank"
             rel="noopener noreferrer"
-            className={`${colour} hover:underline`}
+            className="hover:underline"
             title={j.name}
             onClick={(e) => e.stopPropagation()}
           >
-            {j.passes}/{j.total}
+            <span className={countColour}>{j.passes}/{j.total}</span>
+            {results.length > 0 && (
+              <span className="ml-1.5 tracking-tight">
+                {results.map((r, i) => (
+                  <span
+                    key={i}
+                    className={r === 'P' ? 'text-emerald-300' : 'text-rose-300'}
+                  >
+                    {r}
+                  </span>
+                ))}
+              </span>
+            )}
           </a>
         );
       })}
@@ -66,6 +79,14 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
 
   const sorted = [...repos].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1;
+
+    if (sortKey === 'daily') {
+      // Pin repos with daily jobs above repos without, regardless of direction.
+      const aHas = Array.isArray(a.dailyJobs) && a.dailyJobs.length > 0;
+      const bHas = Array.isArray(b.dailyJobs) && b.dailyJobs.length > 0;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+    }
+
     const av = sortValue(a);
     const bv = sortValue(b);
     if (av == null && bv == null) return 0;

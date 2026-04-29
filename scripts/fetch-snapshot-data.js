@@ -31,10 +31,17 @@
  *                           (default: <repo>/snapshot-data)
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseHTML } from 'linkedom';
+import {
+  buildTodayEntry,
+  upsertHistoryEntry,
+  backfillFromDailyJobs,
+  todayUtcDate,
+  HISTORY_DEFAULT_WINDOW_DAYS,
+} from './lib/metrics-aggregator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = process.env.SNAPSHOT_OUTPUT_DIR
@@ -786,9 +793,10 @@ async function main() {
   }
 
   // Coverage
+  let coverageSnapshot = null;
   try {
-    const coverage = await fetchCoverage();
-    save('coverage.json', coverage);
+    coverageSnapshot = await fetchCoverage();
+    save('coverage.json', coverageSnapshot);
   } catch (err) {
     console.error(`  ✗ Coverage failed: ${err.message}`);
     errors.push('coverage');
@@ -826,13 +834,51 @@ async function main() {
   }
 
   // Automated tests inventory (browser-test-scanner)
+  let automatedTestsSnapshot = null;
   try {
-    const automatedTests = await fetchAutomatedTests();
-    save('automated-tests.json', automatedTests);
+    automatedTestsSnapshot = await fetchAutomatedTests();
+    save('automated-tests.json', automatedTestsSnapshot);
   } catch (err) {
     console.error(`  ✗ Automated tests failed: ${err.message}`);
     errors.push('automated-tests');
     save('automated-tests.json', { generatedAt: null, repoCount: 0, testCount: 0, repos: [] });
+  }
+
+  // Rolling-history aggregate for the Trends Over Time panel. Reads any
+  // existing metrics-history.json from OUT_DIR (Toolforge NFS in prod), upserts
+  // today's entry by UTC date, prunes entries older than the rolling window,
+  // and writes back. On first run (no existing file), seed up to 6 historical
+  // entries from the dailyJobs.results 7-day pass/fail flags so day-1 users
+  // see a populated trend instead of a single dot.
+  try {
+    const historyPath = path.join(OUT_DIR, 'metrics-history.json');
+    let existingEntries = null;
+    if (existsSync(historyPath)) {
+      try {
+        const parsed = JSON.parse(readFileSync(historyPath, 'utf-8'));
+        if (parsed && Array.isArray(parsed.entries)) existingEntries = parsed.entries;
+      } catch (parseErr) {
+        console.warn(`  ⚠ metrics-history.json was malformed; rebuilding (${parseErr.message})`);
+      }
+    }
+
+    const today = buildTodayEntry({
+      automatedTests: automatedTestsSnapshot,
+      coverage: coverageSnapshot,
+      date: todayUtcDate(),
+    });
+
+    let entries = existingEntries ?? backfillFromDailyJobs(automatedTestsSnapshot);
+    entries = upsertHistoryEntry(entries, today);
+
+    save('metrics-history.json', {
+      generatedAt: new Date().toISOString(),
+      windowDays: HISTORY_DEFAULT_WINDOW_DAYS,
+      entries,
+    });
+  } catch (err) {
+    console.error(`  ✗ Metrics history failed: ${err.message}`);
+    errors.push('metrics-history');
   }
 
   // GitHub mobile apps — three endpoints per platform. Each call wrapped in

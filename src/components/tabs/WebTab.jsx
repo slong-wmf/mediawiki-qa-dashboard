@@ -17,6 +17,7 @@ import ExecutionTimePanel from '../ExecutionTimePanel.jsx';
 import BugsPanel from '../BugsPanel.jsx';
 import TrainBlockersPanel from '../TrainBlockersPanel.jsx';
 import AutomatedTestsPanel from '../AutomatedTestsPanel.jsx';
+import TrendsPanel from '../TrendsPanel.jsx';
 import { StewardFilter } from '../CoveragePanel/StewardFilter.jsx';
 import { uniqueStewards } from '../../services/maintainers.js';
 
@@ -34,6 +35,7 @@ export function WebTab({ data }) {
     trainBlockers,
     maintainers,
     automatedTests,
+    metricsHistory,
     initialLoading,
     jenkinsLoading,
     errors,
@@ -150,6 +152,23 @@ export function WebTab({ data }) {
           </Panel>
         </div>
       </section>
+
+      {/* Trends Over Time — full-width below the steward-filtered group. Not
+          steward-filtered because the metrics are dashboard-wide aggregates. */}
+      <div className="mt-6">
+        <Panel
+          title="Trends Over Time"
+          loading={initialLoading}
+          error={errors.metricsHistory}
+          source="snapshot history"
+        >
+          <TrendsPanel
+            data={metricsHistory}
+            loading={initialLoading}
+            error={errors.metricsHistory}
+          />
+        </Panel>
+      </div>
 
       {/* Job Total Time — outside the steward wrapper so it remains unaffected. */}
       <div className="mt-6">

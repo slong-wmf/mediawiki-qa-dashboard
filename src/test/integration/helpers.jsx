@@ -201,6 +201,32 @@ export function makeValidTrainBlockers(blockers = [makeValidBlocker()], override
 }
 
 // ---------------------------------------------------------------------------
+// Metrics history (rolling-history file)
+// ---------------------------------------------------------------------------
+
+/** A single valid history entry as written by scripts/fetch-snapshot-data.js. */
+export function makeValidMetricsHistoryEntry(overrides = {}) {
+  return {
+    date: '2026-04-29',
+    dailyPassRate: { pct: 80, passes: 8, fails: 2, total: 10 },
+    coverage: { coreAvg: 50, extensionsAvg: 65, extensionsCount: 3 },
+    e2eTestCount: { wdio: 5, cypress: 2, total: 7 },
+    dailyTestRunCount: 10,
+    ...overrides,
+  };
+}
+
+/** A valid metrics-history envelope. */
+export function makeValidMetricsHistory(entries = [makeValidMetricsHistoryEntry()], overrides = {}) {
+  return {
+    generatedAt: '2026-04-29T13:00:00.000Z',
+    windowDays: 90,
+    entries,
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Render-safety assertion
 // ---------------------------------------------------------------------------
 

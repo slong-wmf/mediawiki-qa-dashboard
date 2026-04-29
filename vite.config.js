@@ -1,9 +1,41 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { existsSync, statSync, createReadStream } from 'node:fs'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+/**
+ * Dev-only middleware that serves /data/* from snapshot-data/. In prod, the
+ * Toolforge express server (server.js) does the same. Without this, dev mode
+ * returns 404 for /data/metrics-history.json — the only snapshot source for
+ * the Trends panel — so the panel always shows the empty state.
+ */
+function snapshotDataMiddleware() {
+  return {
+    name: 'snapshot-data-dev-middleware',
+    configureServer(server) {
+      const snapshotDir = path.resolve(__dirname, 'snapshot-data')
+      server.middlewares.use('/data', (req, res, next) => {
+        const requested = path.join(snapshotDir, req.url ?? '')
+        if (!requested.startsWith(snapshotDir)) return next()
+        if (!existsSync(requested) || !statSync(requested).isFile()) {
+          res.statusCode = 404
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'not_found', path: req.url }))
+          return
+        }
+        res.setHeader('Content-Type', 'application/json')
+        createReadStream(requested).pipe(res)
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), snapshotDataMiddleware()],
   // App is served from the domain root on Toolforge
   // (https://mw-qa-dashboard.toolforge.org/), so assets resolve at '/'.
   // VITE_STATIC_DATA still gates client-side static-vs-live data behaviour,

@@ -33,7 +33,13 @@ function DailyCell({ jobs }) {
                 {results.map((r, i) => (
                   <span
                     key={i}
-                    className={r === 'P' ? 'text-emerald-300' : 'text-rose-300'}
+                    className={
+                      r === 'P'
+                        ? 'text-emerald-300'
+                        : r === 'U'
+                          ? 'text-orange-400'
+                          : 'text-rose-300'
+                    }
                   >
                     {r}
                   </span>
@@ -96,7 +102,7 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
     return String(av).localeCompare(String(bv)) * dir;
   });
 
-  const header = (key, label, align = 'left') => {
+  const header = (key, label, align = 'left', info = null) => {
     const active = sortKey === key;
     const arrow = active ? (sortDir === 'asc' ? '▲' : '▼') : '';
     return (
@@ -108,7 +114,17 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
         }}
         title={`Sort by ${label}`}
       >
-        {label} {arrow && <span className="text-gray-500">{arrow}</span>}
+        {label}
+        {info && (
+          <span
+            className="ml-1 text-gray-500 cursor-help"
+            title={info}
+            onClick={(e) => e.stopPropagation()}
+          >
+            ⓘ
+          </span>
+        )}
+        {arrow && <span className="ml-1 text-gray-500">{arrow}</span>}
       </th>
     );
   };
@@ -124,7 +140,7 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
             {header('frameworkVersion', 'Version')}
             {header('mediawikiVersion', 'wdio-mediawiki version')}
             {header('gatedSelenium', 'Gated')}
-            {header('daily', 'Daily (7d)')}
+            {header('daily', 'Daily (7d)', 'left', 'P = passed, U = passed on retry (Jenkins UNSTABLE; counted as a pass), F = failed')}
             {header('testCount', 'Tests', 'right')}
           </tr>
         </thead>

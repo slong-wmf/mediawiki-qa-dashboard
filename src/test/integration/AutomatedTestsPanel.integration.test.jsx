@@ -77,6 +77,45 @@ describe('AutomatedTestsPanel – integration contract tests', () => {
     });
   });
 
+  describe('pass-rate column', () => {
+    it('renders an aggregated 7-day pass rate per repo', () => {
+      const data = {
+        generatedAt: null,
+        repoCount: 1,
+        testCount: 1,
+        repos: [
+          {
+            name: 'Mostly',
+            framework: 'wdio',
+            mediawikiVersion: null,
+            frameworkVersion: null,
+            gatedSelenium: false,
+            testCount: 1,
+            tests: [{ name: 't1' }],
+            dailyJobs: [
+              { name: 'job-a', url: 'http://x', passes: 9, fails: 1, total: 10, results: [] },
+            ],
+          },
+          {
+            name: 'NoDaily',
+            framework: 'wdio',
+            mediawikiVersion: null,
+            frameworkVersion: null,
+            gatedSelenium: false,
+            testCount: 1,
+            tests: [{ name: 't1' }],
+            dailyJobs: [],
+          },
+        ],
+      };
+      render(<AutomatedTestsPanel data={data} error={null} loading={false} />);
+      // 9/10 = 90%
+      expect(screen.getByText('90%')).toBeInTheDocument();
+      // The new column header is present
+      expect(screen.getByText('Pass Rate')).toBeInTheDocument();
+    });
+  });
+
   describe('malformed data — no crash', () => {
     it('handles empty array instead of envelope', () => {
       expectNoCrash(() =>

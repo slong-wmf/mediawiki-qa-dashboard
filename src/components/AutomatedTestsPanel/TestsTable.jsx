@@ -1,5 +1,33 @@
 import { Fragment, useState } from 'react';
 
+/**
+ * Aggregate 7-day pass rate across all of a repo's daily jobs.
+ * Returns null when the repo has no daily jobs or no runs to divide by, so the
+ * cell renderer and sort comparator agree on the "no data" sentinel.
+ */
+export function aggregatePassRate(repo) {
+  const jobs = Array.isArray(repo?.dailyJobs) ? repo.dailyJobs : [];
+  let passes = 0;
+  let total = 0;
+  for (const j of jobs) {
+    passes += j.passes ?? 0;
+    total += j.total ?? 0;
+  }
+  return total === 0 ? null : passes / total;
+}
+
+function PassRateCell({ rate }) {
+  if (rate == null) {
+    return <span className="text-gray-600" title="No daily Jenkins job">—</span>;
+  }
+  const pct = Math.round(rate * 100);
+  const colour =
+    rate >= 0.95 ? 'text-emerald-300'
+    : rate >= 0.85 ? 'text-amber-300'
+    : 'text-rose-300';
+  return <span className={colour}>{pct}%</span>;
+}
+
 function DailyCell({ jobs }) {
   if (!Array.isArray(jobs) || jobs.length === 0) {
     return <span className="text-gray-600" title="No daily Jenkins job">—</span>;
@@ -66,13 +94,10 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
   const [expanded, setExpanded] = useState(null);
 
   const sortValue = (repo) => {
-    if (sortKey === 'daily') {
-      // Sort by pass rate over the repo's daily jobs (7d window).
-      const totals = (repo.dailyJobs ?? []).reduce(
-        (acc, j) => ({ p: acc.p + (j.passes ?? 0), t: acc.t + (j.total ?? 0) }),
-        { p: 0, t: 0 },
-      );
-      return totals.t === 0 ? -1 : totals.p / totals.t;
+    if (sortKey === 'daily' || sortKey === 'passRate') {
+      // Sort by aggregate pass rate over the repo's daily jobs (7d window).
+      // null (no daily jobs) sinks below any real rate.
+      return aggregatePassRate(repo) ?? -1;
     }
     return repo[sortKey];
   };
@@ -80,7 +105,7 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
   const sorted = [...repos].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1;
 
-    if (sortKey === 'daily') {
+    if (sortKey === 'daily' || sortKey === 'passRate') {
       // Pin repos with daily jobs above repos without, regardless of direction.
       const aHas = Array.isArray(a.dailyJobs) && a.dailyJobs.length > 0;
       const bHas = Array.isArray(b.dailyJobs) && b.dailyJobs.length > 0;
@@ -124,6 +149,7 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
             {header('frameworkVersion', 'Version')}
             {header('mediawikiVersion', 'wdio-mediawiki version')}
             {header('gatedSelenium', 'Gated')}
+            {header('passRate', 'Pass Rate', 'right')}
             {header('daily', 'Daily (7d)')}
             {header('testCount', 'Tests', 'right')}
           </tr>
@@ -167,6 +193,9 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
                       <span className="text-gray-600" title="Not gated">○</span>
                     )}
                   </td>
+                  <td className="py-1 pr-3 font-mono text-right w-16">
+                    <PassRateCell rate={aggregatePassRate(repo)} />
+                  </td>
                   <td className="py-1 pr-3">
                     <DailyCell jobs={repo.dailyJobs} />
                   </td>
@@ -177,7 +206,7 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
                 {isOpen && (repo.tests?.length ?? 0) > 0 && (
                   <tr>
                     <td></td>
-                    <td colSpan={7} className="py-2 pl-1 pr-3">
+                    <td colSpan={8} className="py-2 pl-1 pr-3">
                       <ul className="list-disc pl-4 text-gray-400 space-y-0.5">
                         {repo.tests.map((t, i) => (
                           <li key={`${rowKey}-${i}`}>
@@ -196,7 +225,7 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
                 {isOpen && (repo.tests?.length ?? 0) === 0 && (
                   <tr>
                     <td></td>
-                    <td colSpan={7} className="py-1 pl-1 pr-3 text-gray-500 italic">
+                    <td colSpan={8} className="py-1 pl-1 pr-3 text-gray-500 italic">
                       No individual test names recorded for this repo.
                     </td>
                   </tr>

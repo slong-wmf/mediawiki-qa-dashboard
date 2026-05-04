@@ -18,6 +18,7 @@ import BugsPanel from '../BugsPanel.jsx';
 import TrainBlockersPanel from '../TrainBlockersPanel.jsx';
 import AutomatedTestsPanel from '../AutomatedTestsPanel.jsx';
 import TrendsPanel from '../TrendsPanel.jsx';
+import FlakyTestsPanel from '../FlakyTestsPanel.jsx';
 import { StewardFilter } from '../CoveragePanel/StewardFilter.jsx';
 import { uniqueStewards } from '../../services/maintainers.js';
 
@@ -36,6 +37,7 @@ export function WebTab({ data }) {
     maintainers,
     automatedTests,
     metricsHistory,
+    flakyTests,
     initialLoading,
     jenkinsLoading,
     errors,
@@ -57,10 +59,25 @@ export function WebTab({ data }) {
 
   return (
     <>
+      {/* Trends Over Time — full-width above the steward-filtered group. Not
+          steward-filtered because the metrics are dashboard-wide aggregates. */}
+      <Panel
+        title="Trends Over Time"
+        loading={initialLoading}
+        error={errors.metricsHistory}
+        source="snapshot history"
+      >
+        <TrendsPanel
+          data={metricsHistory}
+          loading={initialLoading}
+          error={errors.metricsHistory}
+        />
+      </Panel>
+
       {/* Steward-filtered group: Pass/Fail, Coverage, and Automated Tests */}
       <section
         aria-label="Pass/Fail, Code Coverage, and Automated Tests"
-        className="rounded border border-gray-700 bg-gray-800/40 p-4"
+        className="mt-6 rounded border border-gray-700 bg-gray-800/40 p-4"
       >
         <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
           <h2 className="text-sm font-semibold text-gray-200 uppercase tracking-wide">
@@ -153,19 +170,20 @@ export function WebTab({ data }) {
         </div>
       </section>
 
-      {/* Trends Over Time — full-width below the steward-filtered group. Not
-          steward-filtered because the metrics are dashboard-wide aggregates. */}
+      {/* Flaky Tests — full-width below the steward-filtered group. The
+          flaky_tests table doesn't carry MediaWiki extension attribution we
+          can map to maintainers, so it's not steward-filtered. */}
       <div className="mt-6">
         <Panel
-          title="Trends Over Time"
+          title="Flaky Tests"
           loading={initialLoading}
-          error={errors.metricsHistory}
-          source="snapshot history"
+          error={errors.flakyTests}
+          source="releng-data Datasette"
         >
-          <TrendsPanel
-            data={metricsHistory}
+          <FlakyTestsPanel
+            data={flakyTests}
             loading={initialLoading}
-            error={errors.metricsHistory}
+            error={errors.flakyTests}
           />
         </Panel>
       </div>

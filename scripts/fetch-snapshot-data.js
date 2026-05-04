@@ -42,6 +42,10 @@ import {
   todayUtcDate,
   HISTORY_DEFAULT_WINDOW_DAYS,
 } from './lib/metrics-aggregator.js';
+import {
+  fetchFlakyTestRows,
+  AnubisChallengeError,
+} from './lib/flaky-tests-fetcher.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = process.env.SNAPSHOT_OUTPUT_DIR
@@ -523,6 +527,37 @@ function normaliseTestRepo(raw) {
   };
 }
 
+// ── Flaky tests (releng-data Datasette) ──────────────────────────────────────
+
+const FLAKY_TESTS_URL =
+  'https://releng-data.wmcloud.org/flaky_tests.json?sql='
+  + encodeURIComponent('select * from flaky_tests order by count desc;')
+  + '&_shape=array';
+
+// releng-data.wmcloud.org sits behind Anubis bot-protection that blocks
+// non-browser User-Agents at the edge. Coordinated allowlisting (by Toolforge
+// source IP) is the long-term fix — see Task: ask the releng-data operators
+// to allowlist the mw-qa-dashboard tool's IP. Until then the call below will
+// soft-fail and the dashboard will render its empty state.
+//
+// We use the script-wide self-identifying User-Agent (defined above) so the
+// operators can find our requests in their access logs when arranging the
+// allowlist; spoofing a browser UA would obscure who we are.
+
+async function fetchFlakyTests() {
+  console.log('\n📦 Flaky tests: fetching from releng-data.wmcloud.org…');
+  // fetchFlakyTestRows raises a typed AnubisChallengeError when the upstream
+  // serves a bot-challenge page instead of JSON, so the per-source catch
+  // below can surface a loud, actionable message instead of an opaque
+  // "Unexpected token '<'" parse error.
+  const rows = await fetchFlakyTestRows(FLAKY_TESTS_URL, {
+    headers: { Accept: 'application/json' },
+    fetchImpl: (url, opts) => fetchWithRetry(url, opts),
+  });
+  console.log(`  ${rows.length} flaky test rows`);
+  return { generatedAt: new Date().toISOString(), rows };
+}
+
 async function fetchAutomatedTests() {
   console.log('\n📦 Automated tests: fetching from mediawiki.org…');
   const res = await fetchWithRetry(AUTOMATED_TESTS_URL);
@@ -879,6 +914,22 @@ async function main() {
   } catch (err) {
     console.error(`  ✗ Metrics history failed: ${err.message}`);
     errors.push('metrics-history');
+  }
+
+  // Flaky tests (releng-data Datasette)
+  try {
+    const flaky = await fetchFlakyTests();
+    save('flaky-tests.json', flaky);
+  } catch (err) {
+    if (err instanceof AnubisChallengeError) {
+      console.error('\n🚨 ANUBIS BLOCK DETECTED — flaky-tests bypass has regressed:');
+      console.error(`   ${err.message}`);
+      errors.push('flaky-tests:anubis-blocked');
+    } else {
+      console.error(`  ✗ Flaky tests failed: ${err.message}`);
+      errors.push('flaky-tests');
+    }
+    save('flaky-tests.json', { generatedAt: null, rows: [] });
   }
 
   // GitHub mobile apps — three endpoints per platform. Each call wrapped in

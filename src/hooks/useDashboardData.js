@@ -15,6 +15,7 @@ import { fetchRecentBugs, fetchTrainBlockers } from '../services/phabricator.js'
 import { fetchMaintainers } from '../services/maintainers.js';
 import { fetchAutomatedTests } from '../services/automatedTests.js';
 import { fetchMetricsHistory } from '../services/metricsHistory.js';
+import { fetchFlakyTests } from '../services/flakyTests.js';
 import { USE_STATIC_DATA, fetchStaticJson } from '../services/staticData.js';
 
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 3_600_000;
@@ -28,6 +29,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
  * @property {Error|null} maintainers
  * @property {Error|null} automatedTests
  * @property {Error|null} metricsHistory
+ * @property {Error|null} flakyTests
  */
 
 /**
@@ -40,6 +42,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
  * @property {Map|null}        maintainers      - Map<extName, {steward,maintainer}>, or null while loading/failed
  * @property {object|null}     automatedTests   - { generatedAt, repoCount, testCount, repos } from browser-test-scanner
  * @property {object|null}     metricsHistory   - { generatedAt, windowDays, entries } from the rolling-history file
+ * @property {object|null}     flakyTests       - { generatedAt, rows } from the flaky-tests snapshot
  * @property {Date|null}       lastRefreshed    - Timestamp of the last completed fetch cycle
  * @property {boolean}         loading          - True while any full re-fetch is in flight (initial or manual)
  * @property {boolean}         initialLoading   - True only until the first fetch cycle completes; panels use
@@ -70,6 +73,7 @@ export function useDashboardData() {
   const [maintainers, setMaintainers] = useState(null);
   const [automatedTests, setAutomatedTests] = useState(null);
   const [metricsHistory, setMetricsHistory] = useState(null);
+  const [flakyTests, setFlakyTests] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -84,6 +88,7 @@ export function useDashboardData() {
     maintainers: null,
     automatedTests: null,
     metricsHistory: null,
+    flakyTests: null,
   });
   const [jobListLoading, setJobListLoading] = useState(false);
   const [jobListError, setJobListError] = useState(null);
@@ -114,6 +119,7 @@ export function useDashboardData() {
       maintainersResult,
       automatedTestsResult,
       metricsHistoryResult,
+      flakyTestsResult,
     ] = await Promise.allSettled([
       fetchRecentBuilds(jobList),
       fetchCoverageData(),
@@ -122,6 +128,7 @@ export function useDashboardData() {
       fetchMaintainers(),
       fetchAutomatedTests(),
       fetchMetricsHistory(),
+      fetchFlakyTests(),
     ]);
 
     if (!mountedRef.current) return;
@@ -178,6 +185,13 @@ export function useDashboardData() {
       setErrors((prev) => ({ ...prev, metricsHistory: null }));
     } else {
       setErrors((prev) => ({ ...prev, metricsHistory: metricsHistoryResult.reason }));
+    }
+
+    if (flakyTestsResult.status === 'fulfilled') {
+      setFlakyTests(flakyTestsResult.value);
+      setErrors((prev) => ({ ...prev, flakyTests: null }));
+    } else {
+      setErrors((prev) => ({ ...prev, flakyTests: flakyTestsResult.reason }));
     }
 
     // In static mode, show the snapshot generation time rather than "now".
@@ -292,6 +306,7 @@ export function useDashboardData() {
     maintainers,
     automatedTests,
     metricsHistory,
+    flakyTests,
     lastRefreshed,
     loading,
     initialLoading,

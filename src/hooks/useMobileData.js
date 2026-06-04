@@ -15,6 +15,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchRecentWorkflowRuns } from '../services/github/workflows.js';
 import { fetchRecentReleases } from '../services/github/releases.js';
 import { fetchTestInventory } from '../services/github/testInventory.js';
+import { fetchIosTestingDashboard } from '../services/github/iosTesting.js';
 import { USE_STATIC_DATA } from '../services/staticData.js';
 
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 3_600_000;
@@ -24,6 +25,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
  * @property {Error|null} workflows
  * @property {Error|null} releases
  * @property {Error|null} tests
+ * @property {Error|null} iosTesting
  */
 
 /**
@@ -31,6 +33,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
  * @property {object|null}      workflows       From fetchRecentWorkflowRuns()
  * @property {object|null}      releases        From fetchRecentReleases()
  * @property {object|null}      tests           From fetchTestInventory()
+ * @property {object|null}      iosTesting      iOS-only testing dashboard data.
  * @property {Date|null}        lastRefreshed   Timestamp of last completed fetch.
  * @property {boolean}          loading         True during any active refetch.
  * @property {boolean}          initialLoading  True only until the first fetch completes.
@@ -39,7 +42,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
  */
 
 /**
- * Fetch the three GitHub-backed data sources for one mobile-app platform.
+ * Fetch the GitHub-backed data sources for one mobile-app platform.
  * In static mode (production), each call reads a pre-generated JSON file;
  * in live mode (local dev), each call hits api.github.com directly.
  *
@@ -50,6 +53,7 @@ export function useMobileData(platform) {
   const [workflows, setWorkflows] = useState(null);
   const [releases, setReleases] = useState(null);
   const [tests, setTests] = useState(null);
+  const [iosTesting, setIosTesting] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -57,6 +61,7 @@ export function useMobileData(platform) {
     workflows: null,
     releases: null,
     tests: null,
+    iosTesting: null,
   });
 
   // Tracks whether the component is still mounted — guards all state setters
@@ -68,10 +73,11 @@ export function useMobileData(platform) {
   const fetchAllRef = useRef(null);
 
   const fetchAll = useCallback(async () => {
-    const [workflowsResult, releasesResult, testsResult] = await Promise.allSettled([
+    const [workflowsResult, releasesResult, testsResult, iosTestingResult] = await Promise.allSettled([
       fetchRecentWorkflowRuns(platform),
       fetchRecentReleases(platform),
       fetchTestInventory(platform),
+      platform === 'ios' ? fetchIosTestingDashboard() : Promise.resolve(null),
     ]);
 
     if (!mountedRef.current) return;
@@ -95,6 +101,13 @@ export function useMobileData(platform) {
       setErrors((prev) => ({ ...prev, tests: null }));
     } else {
       setErrors((prev) => ({ ...prev, tests: testsResult.reason }));
+    }
+
+    if (iosTestingResult.status === 'fulfilled') {
+      setIosTesting(iosTestingResult.value);
+      setErrors((prev) => ({ ...prev, iosTesting: null }));
+    } else {
+      setErrors((prev) => ({ ...prev, iosTesting: iosTestingResult.reason }));
     }
 
     setLastRefreshed(new Date());
@@ -142,6 +155,7 @@ export function useMobileData(platform) {
     workflows,
     releases,
     tests,
+    iosTesting,
     lastRefreshed,
     loading,
     initialLoading,

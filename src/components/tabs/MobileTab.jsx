@@ -1,6 +1,6 @@
 /**
- * Generic mobile-app tab — used by both iOS and Android. Renders the three
- * GitHub-sourced panels for the given platform, owning its own data hook.
+ * Generic mobile-app tab — used by both iOS and Android. Renders the shared
+ * GitHub-sourced panels for the given platform, plus iOS-only testing details.
  *
  * The hook (`useMobileData`) is colocated inside the tab so each platform
  * fetches independently and a failure on one platform does not affect the
@@ -12,6 +12,7 @@ import { Panel } from '../shared/Panel.jsx';
 import { MobileWorkflowsPanel } from '../mobile/MobileWorkflowsPanel.jsx';
 import { MobileReleasesPanel } from '../mobile/MobileReleasesPanel.jsx';
 import { MobileTestInventoryPanel } from '../mobile/MobileTestInventoryPanel.jsx';
+import { IOSTestingDashboardPanel } from '../mobile/IOSTestingDashboardPanel.jsx';
 import { useMobileData } from '../../hooks/useMobileData.js';
 import { repoFor } from '../../services/github/repos.js';
 
@@ -19,7 +20,7 @@ import { repoFor } from '../../services/github/repos.js';
  * @param {{ platform: 'ios' | 'android' }} props
  */
 export function MobileTab({ platform }) {
-  const { workflows, releases, tests, errors, initialLoading } = useMobileData(platform);
+  const { workflows, releases, tests, iosTesting, errors, initialLoading } = useMobileData(platform);
   const repo = repoFor(platform);
 
   return (
@@ -70,6 +71,23 @@ export function MobileTab({ platform }) {
           />
         </Panel>
       </div>
+
+      {platform === 'ios' && (
+        <div className="mt-6">
+          <Panel
+            title="iOS — Testing Dashboard"
+            loading={initialLoading}
+            error={errors.iosTesting}
+            source="GitHub Actions artifacts"
+          >
+            <IOSTestingDashboardPanel
+              data={iosTesting}
+              error={errors.iosTesting}
+              loading={initialLoading}
+            />
+          </Panel>
+        </div>
+      )}
 
       <div className="mt-6">
         <Panel

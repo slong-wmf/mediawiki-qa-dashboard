@@ -21,12 +21,20 @@ function snapshotDataMiddleware() {
         const requested = path.join(snapshotDir, req.url ?? '')
         if (!requested.startsWith(snapshotDir)) return next()
         if (!existsSync(requested) || !statSync(requested).isFile()) {
+          if (path.extname(req.url ?? '') !== '.json') return next()
           res.statusCode = 404
           res.setHeader('Content-Type', 'application/json')
           res.end(JSON.stringify({ error: 'not_found', path: req.url }))
           return
         }
-        res.setHeader('Content-Type', 'application/json')
+        const extension = path.extname(requested).toLowerCase()
+        const contentType = {
+          '.json': 'application/json',
+          '.mov': 'video/quicktime',
+          '.mp4': 'video/mp4',
+          '.webm': 'video/webm',
+        }[extension] ?? 'application/octet-stream'
+        res.setHeader('Content-Type', contentType)
         createReadStream(requested).pipe(res)
       })
     },

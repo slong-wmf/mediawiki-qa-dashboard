@@ -23,17 +23,18 @@
  *
  * Environment variables (all optional):
  *   PHABRICATOR_TOKEN     — Conduit API token (raises rate limit ceiling)
- *   GITHUB_TOKEN          — GitHub PAT for the mobile-apps fetchers; raises
- *                           the rate limit from 60 req/hr (anon) to 5000 req/hr.
- *                           A no-scope classic PAT or a fine-grained PAT with
- *                           "Public repositories (read-only)" both work.
+ *   GITHUB_TOKEN          — GitHub token for the mobile-app fetchers. Raises
+ *                           the rate limit from 60 req/hr (anon) to 5000 req/hr
+ *                           and enables authenticated iOS coverage artifact
+ *                           downloads.
  *   SNAPSHOT_OUTPUT_DIR   — absolute path to write JSON files into
  *                           (default: <repo>/snapshot-data)
  */
 
-import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inflateRawSync } from 'node:zlib';
 import { parseHTML } from 'linkedom';
 import {
   buildTodayEntry,
@@ -42,6 +43,13 @@ import {
   todayUtcDate,
   HISTORY_DEFAULT_WINDOW_DAYS,
 } from './lib/metrics-aggregator.js';
+import {
+  COVERAGE_SUITES,
+  FAILED_RESULT_BUNDLE_WINDOW_DAYS,
+  IOS_TESTING_WINDOW_DAYS,
+  WORKFLOW_FAMILIES,
+  buildIosTestingDashboard,
+} from '../src/services/github/iosTestingCore.js';
 import {
   fetchFlakyTestRows,
   AnubisChallengeError,
@@ -801,6 +809,346 @@ async function fetchGitHubTestInventory(repo, platform) {
   return buildTestInventory(json, platform, repo.fullName);
 }
 
+function testingRunNames() {
+  return new Set(WORKFLOW_FAMILIES.map((family) => family.workflowName));
+}
+
+function testingCoverageArtifactNames() {
+  return new Set(COVERAGE_SUITES.map((suite) => suite.artifactName));
+}
+
+async function fetchGitHubTestingRuns(repo, now = new Date(), windowDays = IOS_TESTING_WINDOW_DAYS) {
+  const cutoffMs = now.getTime() - windowDays * 86_400_000;
+  const names = testingRunNames();
+  const runs = [];
+
+  for (let page = 1; page <= 10; page += 1) {
+    const url = `${GITHUB_API_BASE}/repos/${repo.owner}/${repo.name}/actions/runs?per_page=100&page=${page}`;
+    const res = await fetchWithRetry(url, { headers: ghHeaders() });
+    if (!res.ok) throw new Error(`GitHub iOS testing runs (${repo.fullName}): ${res.status} ${res.statusText}`);
+    const json = await res.json();
+    const pageRuns = Array.isArray(json.workflow_runs) ? json.workflow_runs : [];
+    for (const raw of pageRuns) {
+      const run = normalizeRun(raw);
+      if (names.has(run.name)) runs.push(run);
+    }
+
+    const oldest = pageRuns
+      .map((run) => Date.parse(run.created_at))
+      .filter((value) => Number.isFinite(value))
+      .reduce((min, value) => Math.min(min, value), Number.POSITIVE_INFINITY);
+    if (pageRuns.length < 100 || oldest < cutoffMs) break;
+  }
+
+  return runs;
+}
+
+async function fetchGitHubArtifacts(repo, now = new Date(), windowDays = IOS_TESTING_WINDOW_DAYS) {
+  const cutoffMs = now.getTime() - windowDays * 86_400_000;
+  const artifacts = [];
+
+  for (let page = 1; page <= 12; page += 1) {
+    const url = `${GITHUB_API_BASE}/repos/${repo.owner}/${repo.name}/actions/artifacts?per_page=100&page=${page}`;
+    const res = await fetchWithRetry(url, { headers: ghHeaders() });
+    if (!res.ok) throw new Error(`GitHub artifacts (${repo.fullName}): ${res.status} ${res.statusText}`);
+    const json = await res.json();
+    const pageArtifacts = Array.isArray(json.artifacts) ? json.artifacts : [];
+    artifacts.push(...pageArtifacts);
+
+    const oldest = pageArtifacts
+      .map((artifact) => Date.parse(artifact.created_at))
+      .filter((value) => Number.isFinite(value))
+      .reduce((min, value) => Math.min(min, value), Number.POSITIVE_INFINITY);
+    if (pageArtifacts.length < 100 || oldest < cutoffMs) break;
+  }
+
+  return artifacts;
+}
+
+function readZipEntries(buffer) {
+  const entries = [];
+  visitZipEntries(buffer, (entry) => {
+    entries.push(entry);
+  });
+  return entries;
+}
+
+function visitZipEntries(buffer, visitor) {
+  const eocdSignature = 0x06054b50;
+  let eocdOffset = -1;
+  for (let offset = buffer.length - 22; offset >= 0; offset -= 1) {
+    if (buffer.readUInt32LE(offset) === eocdSignature) {
+      eocdOffset = offset;
+      break;
+    }
+  }
+  if (eocdOffset < 0) return [];
+
+  const entryCount = buffer.readUInt16LE(eocdOffset + 10);
+  const centralDirectoryOffset = buffer.readUInt32LE(eocdOffset + 16);
+  let offset = centralDirectoryOffset;
+
+  for (let i = 0; i < entryCount; i += 1) {
+    if (buffer.readUInt32LE(offset) !== 0x02014b50) break;
+
+    const compression = buffer.readUInt16LE(offset + 10);
+    const compressedSize = buffer.readUInt32LE(offset + 20);
+    const uncompressedSize = buffer.readUInt32LE(offset + 24);
+    const fileNameLength = buffer.readUInt16LE(offset + 28);
+    const extraLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
+    const nameStart = offset + 46;
+    const fileName = buffer.toString('utf8', nameStart, nameStart + fileNameLength);
+
+    if (buffer.readUInt32LE(localHeaderOffset) !== 0x04034b50) {
+      offset = nameStart + fileNameLength + extraLength + commentLength;
+      continue;
+    }
+
+    const localNameLength = buffer.readUInt16LE(localHeaderOffset + 26);
+    const localExtraLength = buffer.readUInt16LE(localHeaderOffset + 28);
+    const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
+    const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
+    let bytes = null;
+    if (compression === 0) bytes = compressed;
+    else if (compression === 8) bytes = inflateRawSync(compressed);
+
+    if (bytes) visitor({ fileName, bytes, compressedSize, uncompressedSize });
+    offset = nameStart + fileNameLength + extraLength + commentLength;
+  }
+}
+
+function readJsonPayloadsFromZip(buffer) {
+  const payloads = [];
+  for (const entry of readZipEntries(buffer)) {
+    if (!entry.fileName.endsWith('.json')) continue;
+    try {
+      payloads.push(JSON.parse(entry.bytes.toString('utf8')));
+    } catch (err) {
+      console.warn(`  ⚠ could not parse ${entry.fileName} from artifact zip: ${err.message}`);
+    }
+  }
+  return payloads;
+}
+
+async function downloadCoveragePayloads(artifacts, eligibleRunIds, maxDownloads = 240) {
+  const payloads = {};
+  const coverageNames = testingCoverageArtifactNames();
+  const candidates = artifacts
+    .filter((artifact) => !artifact.expired)
+    .filter((artifact) => coverageNames.has(artifact.name))
+    .filter((artifact) => eligibleRunIds.has(artifact.workflow_run?.id))
+    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+    .slice(-maxDownloads);
+
+  if (!GITHUB_TOKEN) {
+    console.warn('  ⚠ GITHUB_TOKEN not set; skipping authenticated coverage artifact downloads');
+    return payloads;
+  }
+
+  for (const artifact of candidates) {
+    try {
+      const res = await fetchWithRetry(artifact.archive_download_url, { headers: ghHeaders() });
+      if (!res.ok) {
+        console.warn(`  ⚠ coverage artifact ${artifact.name} (${artifact.id}) download failed: ${res.status}`);
+        continue;
+      }
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const [payload] = readJsonPayloadsFromZip(buffer);
+      if (payload) payloads[String(artifact.id)] = payload;
+    } catch (err) {
+      console.warn(`  ⚠ coverage artifact ${artifact.name} (${artifact.id}) failed: ${err.message}`);
+    }
+  }
+
+  return payloads;
+}
+
+function safeFilename(value) {
+  const slug = String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'artifact';
+}
+
+function videoExtensionFromBytes(bytes) {
+  if (!bytes || bytes.length < 12) return null;
+  const boxType = bytes.toString('ascii', 4, 8);
+  if (boxType !== 'ftyp') return null;
+  const brands = bytes.toString('ascii', 8, Math.min(bytes.length, 32));
+  return brands.includes('qt') ? '.mov' : '.mp4';
+}
+
+function videoMimeType(extension) {
+  if (extension === '.mov') return 'video/quicktime';
+  return 'video/mp4';
+}
+
+function isWithinRecentWindow(iso, now, windowDays) {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return false;
+  const cutoff = now.getTime() - windowDays * 86_400_000;
+  return ms >= cutoff && ms <= now.getTime() + 86_400_000;
+}
+
+function resultBundleCandidates(runs, artifacts, now = new Date(), windowDays = FAILED_RESULT_BUNDLE_WINDOW_DAYS) {
+  const artifactsByRun = new Map();
+  for (const artifact of artifacts) {
+    if (artifact.expired) continue;
+    const runId = artifact.workflow_run?.id;
+    if (runId == null) continue;
+    if (!artifactsByRun.has(runId)) artifactsByRun.set(runId, new Map());
+    artifactsByRun.get(runId).set(artifact.name, artifact);
+  }
+
+  const candidates = [];
+  for (const family of WORKFLOW_FAMILIES) {
+    if (!family.resultArtifactName) continue;
+
+    const failedRuns = runs
+      .filter((run) => (
+        run.name === family.workflowName
+        && run.status === 'completed'
+        && run.conclusion
+        && run.conclusion !== 'success'
+        && run.conclusion !== 'cancelled'
+        && isWithinRecentWindow(run.created_at, now, windowDays)
+      ))
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+
+    for (const run of failedRuns) {
+      const artifact = artifactsByRun.get(run.id)?.get(family.resultArtifactName);
+      if (!artifact) continue;
+      candidates.push({ family, run, artifact });
+    }
+  }
+
+  return candidates;
+}
+
+async function downloadArtifactBuffer(artifact) {
+  const res = await fetchWithRetry(artifact.archive_download_url, { headers: ghHeaders() });
+  if (!res.ok) throw new Error(`${artifact.name} (${artifact.id}) download failed: ${res.status} ${res.statusText}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+function extractVideosFromArtifactZip({ zipBuffer, run, family, artifact, outputDir }) {
+  const videos = [];
+  let index = 0;
+
+  visitZipEntries(zipBuffer, ({ fileName, bytes }) => {
+    const extension = videoExtensionFromBytes(bytes);
+    if (!extension) return;
+
+    index += 1;
+    const relativePath = path.join(
+      'ios-testing-videos',
+      family.id,
+      String(run.id),
+      `${safeFilename(path.basename(fileName)) || 'recording'}-${index}${extension}`,
+    );
+    const destination = path.join(outputDir, relativePath);
+    mkdirSync(path.dirname(destination), { recursive: true });
+    writeFileSync(destination, bytes);
+
+    videos.push({
+      id: `${family.id}-${run.id}-${index}`,
+      suite: family.title,
+      kind: family.id,
+      runId: run.id,
+      runUrl: run.html_url,
+      runConclusion: run.conclusion ?? '',
+      branch: run.head_branch ?? '',
+      createdAt: run.created_at,
+      artifactName: artifact.name,
+      sourceName: fileName,
+      path: `data/${relativePath.split(path.sep).join('/')}`,
+      bytes: bytes.length,
+      mimeType: videoMimeType(extension),
+    });
+  });
+
+  return videos;
+}
+
+async function extractIosTestingVideos({
+  runs,
+  artifacts,
+  outputDir,
+  now = new Date(),
+  windowDays = FAILED_RESULT_BUNDLE_WINDOW_DAYS,
+}) {
+  const videosDir = path.join(outputDir, 'ios-testing-videos');
+  rmSync(videosDir, { recursive: true, force: true });
+
+  if (!GITHUB_TOKEN) {
+    console.warn('  ⚠ GITHUB_TOKEN not set; skipping authenticated UI result video extraction');
+    return [];
+  }
+
+  const candidates = resultBundleCandidates(runs, artifacts, now, windowDays);
+  const videos = [];
+
+  for (const candidate of candidates) {
+    try {
+      const zipBuffer = await downloadArtifactBuffer(candidate.artifact);
+      videos.push(
+        ...extractVideosFromArtifactZip({
+          zipBuffer,
+          run: candidate.run,
+          family: candidate.family,
+          artifact: candidate.artifact,
+          outputDir,
+        }),
+      );
+    } catch (err) {
+      console.warn(`  ⚠ video extraction skipped for ${candidate.artifact.name} (${candidate.run.id}): ${err.message}`);
+    }
+  }
+
+  return videos;
+}
+
+async function fetchGitHubIosTestingDashboard(repo) {
+  const generatedAt = new Date().toISOString();
+  const now = new Date(generatedAt);
+  const [runs, artifacts] = await Promise.all([
+    fetchGitHubTestingRuns(repo, now),
+    fetchGitHubArtifacts(repo, now),
+  ]);
+
+  const eligibleCoverageRunIds = new Set(
+    runs
+      .filter((run) => (
+        run.event === 'push'
+        && run.head_branch === 'main'
+        && run.status === 'completed'
+        && run.conclusion === 'success'
+      ))
+      .map((run) => run.id),
+  );
+  const coveragePayloadsByArtifactId = await downloadCoveragePayloads(artifacts, eligibleCoverageRunIds);
+  const videos = await extractIosTestingVideos({ runs, artifacts, outputDir: OUT_DIR, now });
+  const coveragePayloadCount = Object.keys(coveragePayloadsByArtifactId).length;
+
+  return buildIosTestingDashboard({
+    runs,
+    artifacts,
+    coveragePayloadsByArtifactId,
+    coverageStatus: {
+      available: coveragePayloadCount > 0,
+      reason: coveragePayloadCount > 0
+        ? null
+        : 'No coverage artifact payloads were downloaded. A GitHub token with Actions artifact access is required for coverage deltas.',
+    },
+    videos,
+    generatedAt,
+    now,
+  });
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -809,7 +1157,7 @@ async function main() {
   if (PHAB_TOKEN) console.log('   Phabricator token: provided');
   else             console.log('   Phabricator token: not set (using anonymous rate limit)');
   if (GITHUB_TOKEN) console.log('   GitHub token: provided (5000 req/hr quota)');
-  else              console.log('   GitHub token: not set (anonymous 60 req/hr quota — fine for 6 calls)');
+  else              console.log('   GitHub token: not set (anonymous quota; iOS coverage artifact downloads skipped)');
 
   const errors = [];
 
@@ -971,6 +1319,18 @@ async function main() {
         totals: { uiTests: 0, unitTests: 0, total: 0 },
         byDirectory: [],
       });
+    }
+
+    if (platform === 'ios') {
+      try {
+        const data = await fetchGitHubIosTestingDashboard(repo);
+        save('ios-testing.json', data);
+      } catch (err) {
+        console.error(`  ✗ ios testing dashboard failed: ${err.message}`);
+        errors.push('ios-testing');
+        const generatedAt = new Date().toISOString();
+        save('ios-testing.json', buildIosTestingDashboard({ generatedAt }));
+      }
     }
   }
 

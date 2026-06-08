@@ -12,6 +12,7 @@ on:
 
 # Required for the deploy-pages action
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -48,6 +49,7 @@ jobs:
           # Optional — raises the Phabricator Conduit rate-limit ceiling.
           # Add this as a repository secret: Settings → Secrets → Actions → PHABRICATOR_TOKEN
           PHABRICATOR_TOKEN: ${{ secrets.PHABRICATOR_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Build (static mode)
         run: npm run build

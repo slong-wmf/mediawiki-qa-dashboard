@@ -8,6 +8,7 @@ import {
   coverageTargetsFromPayload,
   coverageValue,
   IOS_TESTING_WINDOW_DAYS,
+  isCoverageRunForSuite,
   summarizeStability,
 } from '../../../services/github/iosTestingCore.js';
 
@@ -76,7 +77,7 @@ describe('coverage helpers', () => {
     ]);
   });
 
-  it('builds coverage suites from successful main run artifacts only', () => {
+  it('builds coverage suites from successful main push artifacts for unit targets', () => {
     const runs = [
       makeRun({ id: 1, created_at: '2026-05-30T10:00:00Z' }),
       makeRun({ id: 2, created_at: '2026-06-02T10:00:00Z' }),
@@ -106,6 +107,58 @@ describe('coverage helpers', () => {
     expect(suite.points).toHaveLength(2);
     expect(suite.summary.delta).toBe(10);
   });
+
+  it('builds UI coverage points from repository-dispatched nightly artifacts when present', () => {
+    const runs = [
+      makeRun({
+        id: 10,
+        name: 'Run UI Tests',
+        event: 'repository_dispatch',
+        head_branch: 'main',
+        created_at: '2026-06-01T10:00:00Z',
+      }),
+      makeRun({
+        id: 11,
+        name: 'Run UI Tests',
+        event: 'pull_request',
+        head_branch: 'feature',
+        created_at: '2026-06-02T10:00:00Z',
+      }),
+      makeRun({
+        id: 12,
+        name: 'Run UI Tests',
+        event: 'repository_dispatch',
+        head_branch: 'main',
+        conclusion: 'failure',
+        created_at: '2026-06-03T10:00:00Z',
+      }),
+    ];
+    const artifacts = [
+      makeArtifact({ id: 201, name: 'WikipediaUITests-coverage', workflow_run: { id: 10 } }),
+      makeArtifact({ id: 202, name: 'WikipediaUITests-coverage', workflow_run: { id: 11 } }),
+      makeArtifact({ id: 203, name: 'WikipediaUITests-coverage', workflow_run: { id: 12 } }),
+    ];
+    const coveragePayloadsByArtifactId = {
+      201: { WikipediaUITests: { 'Wikipedia.app': 16, 'WMF.framework': 25 } },
+      202: { WikipediaUITests: { 'Wikipedia.app': 100 } },
+      203: { WikipediaUITests: { 'Wikipedia.app': 100 } },
+    };
+
+    const suite = buildCoverageSuites({
+      runs,
+      artifacts,
+      coveragePayloadsByArtifactId,
+      now: NOW,
+    }).find((item) => item.id === 'ui');
+
+    expect(suite.points).toHaveLength(1);
+    expect(suite.points[0].runId).toBe(10);
+    expect(suite.points[0].targets).toEqual({
+      'Wikipedia.app': 16,
+      'WMF.framework': 25,
+    });
+    expect(isCoverageRunForSuite(runs[0], { kind: 'ui' })).toBe(true);
+  });
 });
 
 describe('stability helpers', () => {
@@ -125,18 +178,32 @@ describe('stability helpers', () => {
     ]);
   });
 
+  it('can summarize repository-dispatched nightly stability', () => {
+    const summary = summarizeStability([
+      makeRun({ event: 'repository_dispatch', conclusion: 'success' }),
+      makeRun({ event: 'repository_dispatch', conclusion: 'failure' }),
+      makeRun({ event: 'pull_request', conclusion: 'failure' }),
+    ], { events: ['repository_dispatch'] });
+
+    expect(summary.rate).toBe(50);
+    expect(summary.consideredRuns).toBe(2);
+    expect(summary.failures).toBe(1);
+  });
+
   it('returns one stability summary per workflow family', () => {
     const summaries = buildStabilitySummaries({
       runs: [
         makeRun({ name: 'Run Unit Tests', event: 'pull_request' }),
         makeRun({ name: 'Run UI Tests', event: 'pull_request', conclusion: 'failure' }),
+        makeRun({ name: 'Run UI Tests', event: 'repository_dispatch', conclusion: 'success' }),
         makeRun({ name: 'Run E2E Tests', event: 'pull_request', conclusion: 'success' }),
       ],
       now: NOW,
     });
 
     expect(summaries.map((summary) => summary.id)).toEqual(['unit', 'ui', 'e2e']);
-    expect(summaries.find((summary) => summary.id === 'ui').rate).toBe(0);
+    expect(summaries.find((summary) => summary.id === 'ui').rate).toBe(100);
+    expect(summaries.find((summary) => summary.id === 'ui').stabilityLabel).toBe('Nightly stability');
   });
 });
 

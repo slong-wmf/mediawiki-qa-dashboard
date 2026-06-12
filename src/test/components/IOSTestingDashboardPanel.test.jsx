@@ -119,9 +119,9 @@ const DATA = {
     },
   ],
   stability: [
-    { id: 'unit', title: 'Unit Tests', rate: 95, successes: 19, failures: 1, ignoredRuns: 0 },
-    { id: 'ui', title: 'UI Tests', rate: 80, successes: 8, failures: 2, ignoredRuns: 1 },
-    { id: 'e2e', title: 'E2E UI Tests', rate: 70, successes: 7, failures: 3, ignoredRuns: 0 },
+    { id: 'unit', title: 'Unit Tests', stabilityLabel: 'PR stability', rate: 95, successes: 19, failures: 1, ignoredRuns: 0 },
+    { id: 'ui', title: 'UI Tests', stabilityLabel: 'Nightly stability', rate: 80, successes: 8, failures: 2, ignoredRuns: 1 },
+    { id: 'e2e', title: 'E2E UI Tests', stabilityLabel: 'PR stability', rate: 70, successes: 7, failures: 3, ignoredRuns: 0 },
   ],
   resultBundles: [
     {
@@ -180,7 +180,9 @@ describe('IOSTestingDashboardPanel', () => {
 
     expect(screen.getByText('coverage targets')).toBeInTheDocument();
     expect(screen.getByText('unit PR stability')).toBeInTheDocument();
-    expect(screen.getByText('UI PR stability')).toBeInTheDocument();
+    expect(screen.getByText('UI nightly stability')).toBeInTheDocument();
+    expect(screen.getByText('Test stability by workflow')).toBeInTheDocument();
+    expect(screen.getByText('Nightly stability')).toBeInTheDocument();
     expect(screen.getByText('7-day coverage deltas')).toBeInTheDocument();
     expect(screen.getByTestId('line-chart')).toBeInTheDocument();
     expect(screen.getAllByTestId('line').map((line) => line.getAttribute('data-name'))).toEqual([

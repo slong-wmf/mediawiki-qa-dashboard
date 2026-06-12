@@ -49,6 +49,7 @@ jobs:
           # Optional — raises the Phabricator Conduit rate-limit ceiling.
           # Add this as a repository secret: Settings → Secrets → Actions → PHABRICATOR_TOKEN
           PHABRICATOR_TOKEN: ${{ secrets.PHABRICATOR_TOKEN }}
+          WIKIPEDIA_IOS_ARTIFACTS_TOKEN: ${{ secrets.WIKIPEDIA_IOS_ARTIFACTS_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Build (static mode)

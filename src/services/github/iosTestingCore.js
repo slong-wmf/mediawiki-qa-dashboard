@@ -57,18 +57,24 @@ export const WORKFLOW_FAMILIES = [
     title: 'Unit Tests',
     workflowName: 'Run Unit Tests',
     resultArtifactName: null,
+    stabilityEvents: ['pull_request'],
+    stabilityLabel: 'PR stability',
   },
   {
     id: 'ui',
     title: 'UI Tests',
     workflowName: 'Run UI Tests',
     resultArtifactName: 'WikipediaUITests-TestResults',
+    stabilityEvents: ['repository_dispatch'],
+    stabilityLabel: 'Nightly stability',
   },
   {
     id: 'e2e',
     title: 'E2E UI Tests',
     workflowName: 'Run E2E Tests',
     resultArtifactName: 'WikipediaUITests-E2E-TestResults',
+    stabilityEvents: ['pull_request'],
+    stabilityLabel: 'PR stability',
   },
 ];
 
@@ -112,6 +118,31 @@ function compareCreatedAtAsc(a, b) {
 
 function compareCreatedAtDesc(a, b) {
   return (parseDateMs(b.created_at ?? b.createdAt) ?? 0) - (parseDateMs(a.created_at ?? a.createdAt) ?? 0);
+}
+
+function isSuccessfulCompletedRun(run) {
+  return (
+    run.status === 'completed'
+    && run.conclusion === 'success'
+  );
+}
+
+function isMainPush(run) {
+  return run.event === 'push' && run.head_branch === 'main';
+}
+
+function isNightlyDispatch(run) {
+  return run.event === 'repository_dispatch' && run.head_branch === 'main';
+}
+
+export function isCoverageRunForSuite(run, suite) {
+  if (!isSuccessfulCompletedRun(run)) return false;
+
+  if (suite.kind === 'ui') {
+    return isMainPush(run) || isNightlyDispatch(run);
+  }
+
+  return isMainPush(run);
 }
 
 export function normalizeArtifact(raw) {
@@ -209,10 +240,7 @@ export function buildCoverageSuites({
     const candidateRuns = allRuns
       .filter((run) => (
         run.name === suite.workflowName
-        && run.event === 'push'
-        && run.head_branch === 'main'
-        && run.status === 'completed'
-        && run.conclusion === 'success'
+        && isCoverageRunForSuite(run, suite)
         && isWithinWindow(run.created_at, now, windowDays)
       ))
       .sort(compareCreatedAtAsc)
@@ -250,14 +278,15 @@ export function buildCoverageSuites({
   });
 }
 
-export function summarizeStability(runs) {
-  const prRuns = (runs ?? []).filter((run) => (
-    run.event === 'pull_request' && run.status === 'completed'
+export function summarizeStability(runs, { events = ['pull_request'] } = {}) {
+  const allowedEvents = new Set(events);
+  const sourceRuns = (runs ?? []).filter((run) => (
+    allowedEvents.has(run.event) && run.status === 'completed'
   ));
-  const considered = prRuns.filter((run) => STABILITY_CONCLUSIONS.has(run.conclusion));
+  const considered = sourceRuns.filter((run) => STABILITY_CONCLUSIONS.has(run.conclusion));
   const successes = considered.filter((run) => run.conclusion === 'success');
   const failures = considered.filter((run) => run.conclusion !== 'success');
-  const ignored = prRuns.filter((run) => !STABILITY_CONCLUSIONS.has(run.conclusion));
+  const ignored = sourceRuns.filter((run) => !STABILITY_CONCLUSIONS.has(run.conclusion));
   const rate = considered.length ? roundPct((successes.length / considered.length) * 100) : null;
 
   const daily = new Map();
@@ -298,7 +327,12 @@ export function buildStabilitySummaries({
     id: family.id,
     title: family.title,
     workflowName: family.workflowName,
-    ...summarizeStability(filteredRuns.filter((run) => run.name === family.workflowName)),
+    stabilityEvents: family.stabilityEvents,
+    stabilityLabel: family.stabilityLabel,
+    ...summarizeStability(
+      filteredRuns.filter((run) => run.name === family.workflowName),
+      { events: family.stabilityEvents },
+    ),
   }));
 }
 

@@ -173,7 +173,7 @@ export function IOSTestingDashboardPanel({ data, error, loading }) {
           <div className="text-lg font-bold text-pink-300">
             {pct(stability.find((item) => item.id === 'ui')?.rate)}
           </div>
-          <div className="text-gray-400">UI PR stability</div>
+          <div className="text-gray-400">UI nightly stability</div>
         </div>
         <div className="rounded p-3 bg-gray-700/50">
           <div className="text-lg font-bold text-red-300">{failedBundles.length}</div>
@@ -239,7 +239,7 @@ export function IOSTestingDashboardPanel({ data, error, loading }) {
       )}
 
       <div>
-        <p className="text-xs text-gray-500 mb-2 uppercase tracking-wide">PR stability by workflow</p>
+        <p className="text-xs text-gray-500 mb-2 uppercase tracking-wide">Test stability by workflow</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           {stability.map((item) => {
             const rate = item.rate ?? 0;
@@ -248,6 +248,9 @@ export function IOSTestingDashboardPanel({ data, error, loading }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm text-gray-200">{item.title}</span>
                   <span className="text-sm font-semibold text-gray-100">{pct(item.rate)}</span>
+                </div>
+                <div className="mt-0.5 text-[10px] uppercase tracking-wide text-gray-500">
+                  {item.stabilityLabel ?? 'PR stability'}
                 </div>
                 <div className="mt-2 h-2 rounded bg-gray-800 overflow-hidden">
                   <div

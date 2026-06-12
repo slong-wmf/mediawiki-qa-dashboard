@@ -23,9 +23,11 @@
  *
  * Environment variables (all optional):
  *   PHABRICATOR_TOKEN     — Conduit API token (raises rate limit ceiling)
- *   GITHUB_TOKEN          — GitHub token for the mobile-app fetchers. Raises
- *                           the rate limit from 60 req/hr (anon) to 5000 req/hr
- *                           and enables authenticated iOS coverage artifact
+ *   GITHUB_TOKEN          — GitHub token for mobile-app metadata fetches. Raises
+ *                           the rate limit from 60 req/hr (anon) to 5000 req/hr.
+ *   WIKIPEDIA_IOS_ARTIFACTS_TOKEN
+ *                         — Token with Actions: read on wikimedia/wikipedia-ios.
+ *                           Required for iOS coverage and result-bundle archive
  *                           downloads.
  *   SNAPSHOT_OUTPUT_DIR   — absolute path to write JSON files into
  *                           (default: <repo>/snapshot-data)
@@ -49,6 +51,7 @@ import {
   IOS_TESTING_WINDOW_DAYS,
   WORKFLOW_FAMILIES,
   buildIosTestingDashboard,
+  isCoverageRunForSuite,
 } from '../src/services/github/iosTestingCore.js';
 import {
   fetchFlakyTestRows,
@@ -101,6 +104,8 @@ async function fetchWithRetry(url, options = {}, maxRetries = 4) {
 const JENKINS_BASE    = 'https://integration.wikimedia.org/ci';
 const PHAB_BASE       = 'https://phabricator.wikimedia.org/api';
 const PHAB_TOKEN      = process.env.PHABRICATOR_TOKEN ?? '';
+const GITHUB_TOKEN    = process.env.GITHUB_TOKEN ?? '';
+const WIKIPEDIA_IOS_ARTIFACTS_TOKEN = process.env.WIKIPEDIA_IOS_ARTIFACTS_TOKEN ?? '';
 const LOOKBACK_DAYS   = 7;
 const PAGE_LIMIT      = 100;
 const MAX_PAGES       = 2;
@@ -112,7 +117,6 @@ const TRAIN_PHID      = 'PHID-PROJ-fmcvjrkfvvzz3gxavs3a';
 // src/services/github/{workflows,releases,testInventory}.js exactly so the
 // frontend swaps seamlessly between live API calls and these snapshots.
 const GITHUB_API_BASE = 'https://api.github.com';
-const GITHUB_TOKEN    = process.env.GITHUB_TOKEN ?? '';
 const GITHUB_REPOS = {
   ios:     { fullName: 'wikimedia/wikipedia-ios',          owner: 'wikimedia', name: 'wikipedia-ios' },
   android: { fullName: 'wikimedia/apps-android-wikipedia', owner: 'wikimedia', name: 'apps-android-wikipedia' },
@@ -635,10 +639,19 @@ async function fetchMaintainers() {
 // ── GitHub (mobile apps) ─────────────────────────────────────────────────────
 
 function ghHeaders() {
+  const token = GITHUB_TOKEN || WIKIPEDIA_IOS_ARTIFACTS_TOKEN;
   return {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
-    ...(GITHUB_TOKEN ? { Authorization: `Bearer ${GITHUB_TOKEN}` } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+function wikipediaIosArtifactHeaders() {
+  return {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    Authorization: `Bearer ${WIKIPEDIA_IOS_ARTIFACTS_TOKEN}`,
   };
 }
 
@@ -942,14 +955,14 @@ async function downloadCoveragePayloads(artifacts, eligibleRunIds, maxDownloads 
     .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
     .slice(-maxDownloads);
 
-  if (!GITHUB_TOKEN) {
-    console.warn('  ⚠ GITHUB_TOKEN not set; skipping authenticated coverage artifact downloads');
+  if (!WIKIPEDIA_IOS_ARTIFACTS_TOKEN) {
+    console.warn('  ⚠ WIKIPEDIA_IOS_ARTIFACTS_TOKEN not set; skipping iOS coverage artifact downloads');
     return payloads;
   }
 
   for (const artifact of candidates) {
     try {
-      const res = await fetchWithRetry(artifact.archive_download_url, { headers: ghHeaders() });
+      const res = await fetchWithRetry(artifact.archive_download_url, { headers: wikipediaIosArtifactHeaders() });
       if (!res.ok) {
         console.warn(`  ⚠ coverage artifact ${artifact.name} (${artifact.id}) download failed: ${res.status}`);
         continue;
@@ -1029,7 +1042,7 @@ function resultBundleCandidates(runs, artifacts, now = new Date(), windowDays = 
 }
 
 async function downloadArtifactBuffer(artifact) {
-  const res = await fetchWithRetry(artifact.archive_download_url, { headers: ghHeaders() });
+  const res = await fetchWithRetry(artifact.archive_download_url, { headers: wikipediaIosArtifactHeaders() });
   if (!res.ok) throw new Error(`${artifact.name} (${artifact.id}) download failed: ${res.status} ${res.statusText}`);
   return Buffer.from(await res.arrayBuffer());
 }
@@ -1083,8 +1096,8 @@ async function extractIosTestingVideos({
   const videosDir = path.join(outputDir, 'ios-testing-videos');
   rmSync(videosDir, { recursive: true, force: true });
 
-  if (!GITHUB_TOKEN) {
-    console.warn('  ⚠ GITHUB_TOKEN not set; skipping authenticated UI result video extraction');
+  if (!WIKIPEDIA_IOS_ARTIFACTS_TOKEN) {
+    console.warn('  ⚠ WIKIPEDIA_IOS_ARTIFACTS_TOKEN not set; skipping UI result video extraction');
     return [];
   }
 
@@ -1122,10 +1135,10 @@ async function fetchGitHubIosTestingDashboard(repo) {
   const eligibleCoverageRunIds = new Set(
     runs
       .filter((run) => (
-        run.event === 'push'
-        && run.head_branch === 'main'
-        && run.status === 'completed'
-        && run.conclusion === 'success'
+        COVERAGE_SUITES.some((suite) => (
+          run.name === suite.workflowName
+          && isCoverageRunForSuite(run, suite)
+        ))
       ))
       .map((run) => run.id),
   );
@@ -1141,7 +1154,7 @@ async function fetchGitHubIosTestingDashboard(repo) {
       available: coveragePayloadCount > 0,
       reason: coveragePayloadCount > 0
         ? null
-        : 'No coverage artifact payloads were downloaded. A GitHub token with Actions artifact access is required for coverage deltas.',
+        : 'No coverage artifact payloads were downloaded. WIKIPEDIA_IOS_ARTIFACTS_TOKEN with Actions read access to wikimedia/wikipedia-ios is required for coverage deltas.',
     },
     videos,
     generatedAt,
@@ -1156,8 +1169,10 @@ async function main() {
   console.log(`   Output: ${OUT_DIR}/`);
   if (PHAB_TOKEN) console.log('   Phabricator token: provided');
   else             console.log('   Phabricator token: not set (using anonymous rate limit)');
-  if (GITHUB_TOKEN) console.log('   GitHub token: provided (5000 req/hr quota)');
-  else              console.log('   GitHub token: not set (anonymous quota; iOS coverage artifact downloads skipped)');
+  if (GITHUB_TOKEN || WIKIPEDIA_IOS_ARTIFACTS_TOKEN) console.log('   GitHub metadata token: provided (5000 req/hr quota)');
+  else                                               console.log('   GitHub metadata token: not set (anonymous quota)');
+  if (WIKIPEDIA_IOS_ARTIFACTS_TOKEN) console.log('   Wikipedia iOS artifacts token: provided');
+  else                               console.log('   Wikipedia iOS artifacts token: not set (iOS artifact downloads skipped)');
 
   const errors = [];
 

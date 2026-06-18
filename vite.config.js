@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, statSync, createReadStream } from 'node:fs'
+import { resolveByteRange } from './vite-range.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -20,7 +21,8 @@ function snapshotDataMiddleware() {
       server.middlewares.use('/data', (req, res, next) => {
         const requested = path.join(snapshotDir, req.url ?? '')
         if (!requested.startsWith(snapshotDir)) return next()
-        if (!existsSync(requested) || !statSync(requested).isFile()) {
+        const stat = existsSync(requested) ? statSync(requested) : null
+        if (!stat || !stat.isFile()) {
           if (path.extname(req.url ?? '') !== '.json') return next()
           res.statusCode = 404
           res.setHeader('Content-Type', 'application/json')
@@ -34,7 +36,36 @@ function snapshotDataMiddleware() {
           '.mp4': 'video/mp4',
           '.webm': 'video/webm',
         }[extension] ?? 'application/octet-stream'
+        const fileSize = stat.size
         res.setHeader('Content-Type', contentType)
+        res.setHeader('Accept-Ranges', 'bytes')
+
+        const resolved = resolveByteRange(req.headers.range, fileSize)
+        if (resolved.type === 'unsatisfiable') {
+          res.statusCode = 416
+          res.setHeader('Content-Range', `bytes */${fileSize}`)
+          res.end()
+          return
+        }
+
+        if (resolved.type === 'range') {
+          const { start, end } = resolved
+          res.statusCode = 206
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`)
+          res.setHeader('Content-Length', end - start + 1)
+          if (req.method === 'HEAD') {
+            res.end()
+            return
+          }
+          createReadStream(requested, { start, end }).pipe(res)
+          return
+        }
+
+        res.setHeader('Content-Length', fileSize)
+        if (req.method === 'HEAD') {
+          res.end()
+          return
+        }
         createReadStream(requested).pipe(res)
       })
     },

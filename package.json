@@ -20,7 +20,8 @@
     "express": "^4.21.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

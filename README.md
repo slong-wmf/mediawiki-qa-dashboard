@@ -189,7 +189,11 @@ file so a failure tells you exactly which file and URL is broken.
   deltas and inline failed-run recordings are populated by static snapshot data
   generated with `WIKIPEDIA_IOS_ARTIFACTS_TOKEN`. The dashboard can only chart
   UI/E2E coverage for runs that publish the expected `WikipediaUITests-coverage`
-  or `WikipediaUITests-E2E-coverage` artifact.
+  or `WikipediaUITests-E2E-coverage` artifact. Inline recording extraction
+  streams each `.xcresult` archive through a temporary file and writes every
+  recording chunk-by-chunk, so the snapshot job's memory stays bounded
+  regardless of archive size. Individual recordings above 150 MiB are skipped to
+  cap the size of any single file published to the snapshot directory.
 - The Tailwind CSS CDN script ([cdn.tailwindcss.com](https://cdn.tailwindcss.com)) is used for development
   convenience. For production, replace it with the PostCSS plugin and a proper build step.
 - The Vite proxy (`vite.config.js`) handles CORS for [Phabricator](https://phabricator.wikimedia.org), [Jenkins](https://integration.wikimedia.org/ci), and the

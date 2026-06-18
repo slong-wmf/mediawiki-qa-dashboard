@@ -33,11 +33,18 @@
  *                           (default: <repo>/snapshot-data)
  */
 
-import { writeFileSync, mkdirSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync, rmSync, mkdtempSync, createWriteStream } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 import { parseHTML } from 'linkedom';
+import {
+  safeFilename,
+  extractVideosFromArtifactZipFile,
+} from './lib/ios-recordings.js';
 import {
   buildTodayEntry,
   upsertHistoryEntry,
@@ -978,27 +985,6 @@ async function downloadCoveragePayloads(artifacts, eligibleRunIds, maxDownloads 
   return payloads;
 }
 
-function safeFilename(value) {
-  const slug = String(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug || 'artifact';
-}
-
-function videoExtensionFromBytes(bytes) {
-  if (!bytes || bytes.length < 12) return null;
-  const boxType = bytes.toString('ascii', 4, 8);
-  if (boxType !== 'ftyp') return null;
-  const brands = bytes.toString('ascii', 8, Math.min(bytes.length, 32));
-  return brands.includes('qt') ? '.mov' : '.mp4';
-}
-
-function videoMimeType(extension) {
-  if (extension === '.mov') return 'video/quicktime';
-  return 'video/mp4';
-}
-
 function isWithinRecentWindow(iso, now, windowDays) {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return false;
@@ -1041,49 +1027,21 @@ function resultBundleCandidates(runs, artifacts, now = new Date(), windowDays = 
   return candidates;
 }
 
-async function downloadArtifactBuffer(artifact) {
-  const res = await fetchWithRetry(artifact.archive_download_url, { headers: wikipediaIosArtifactHeaders() });
-  if (!res.ok) throw new Error(`${artifact.name} (${artifact.id}) download failed: ${res.status} ${res.statusText}`);
-  return Buffer.from(await res.arrayBuffer());
-}
+async function downloadArtifactToFile(artifact) {
+  const tempDir = mkdtempSync(path.join(tmpdir(), 'mw-qa-ios-result-bundle-'));
+  const zipPath = path.join(tempDir, `${safeFilename(artifact.name)}-${artifact.id}.zip`);
 
-function extractVideosFromArtifactZip({ zipBuffer, run, family, artifact, outputDir }) {
-  const videos = [];
-  let index = 0;
+  try {
+    const res = await fetchWithRetry(artifact.archive_download_url, { headers: wikipediaIosArtifactHeaders() });
+    if (!res.ok) throw new Error(`${artifact.name} (${artifact.id}) download failed: ${res.status} ${res.statusText}`);
+    if (!res.body) throw new Error(`${artifact.name} (${artifact.id}) download returned no response body`);
 
-  visitZipEntries(zipBuffer, ({ fileName, bytes }) => {
-    const extension = videoExtensionFromBytes(bytes);
-    if (!extension) return;
-
-    index += 1;
-    const relativePath = path.join(
-      'ios-testing-videos',
-      family.id,
-      String(run.id),
-      `${safeFilename(path.basename(fileName)) || 'recording'}-${index}${extension}`,
-    );
-    const destination = path.join(outputDir, relativePath);
-    mkdirSync(path.dirname(destination), { recursive: true });
-    writeFileSync(destination, bytes);
-
-    videos.push({
-      id: `${family.id}-${run.id}-${index}`,
-      suite: family.title,
-      kind: family.id,
-      runId: run.id,
-      runUrl: run.html_url,
-      runConclusion: run.conclusion ?? '',
-      branch: run.head_branch ?? '',
-      createdAt: run.created_at,
-      artifactName: artifact.name,
-      sourceName: fileName,
-      path: `data/${relativePath.split(path.sep).join('/')}`,
-      bytes: bytes.length,
-      mimeType: videoMimeType(extension),
-    });
-  });
-
-  return videos;
+    await pipeline(Readable.fromWeb(res.body), createWriteStream(zipPath));
+    return { tempDir, zipPath };
+  } catch (err) {
+    rmSync(tempDir, { recursive: true, force: true });
+    throw err;
+  }
 }
 
 async function extractIosTestingVideos({
@@ -1104,12 +1062,16 @@ async function extractIosTestingVideos({
   const candidates = resultBundleCandidates(runs, artifacts, now, windowDays);
   const videos = [];
 
+  console.log(`  Scanning ${candidates.length} failed UI result-bundle archive${candidates.length === 1 ? '' : 's'} for inline recordings`);
+
   for (const candidate of candidates) {
+    let tempDir = null;
     try {
-      const zipBuffer = await downloadArtifactBuffer(candidate.artifact);
+      const downloaded = await downloadArtifactToFile(candidate.artifact);
+      tempDir = downloaded.tempDir;
       videos.push(
-        ...extractVideosFromArtifactZip({
-          zipBuffer,
+        ...await extractVideosFromArtifactZipFile({
+          zipPath: downloaded.zipPath,
           run: candidate.run,
           family: candidate.family,
           artifact: candidate.artifact,
@@ -1118,6 +1080,8 @@ async function extractIosTestingVideos({
       );
     } catch (err) {
       console.warn(`  ⚠ video extraction skipped for ${candidate.artifact.name} (${candidate.run.id}): ${err.message}`);
+    } finally {
+      if (tempDir) rmSync(tempDir, { recursive: true, force: true });
     }
   }
 

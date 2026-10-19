@@ -53,16 +53,16 @@ const BUILDS = [
     tests: null,
   },
   {
-    job: 'selenium-daily-beta-Echo',
-    job_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/',
-    build_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/1/',
+    job: 'catalyst-daily-Echo',
+    job_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/',
+    build_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/1/',
     status: 'passed', duration_seconds: 120, timestamp: new Date().toISOString(),
     tests: { total: 5, passed: 5, failed: 0, skipped: 0 },
   },
   {
-    job: 'selenium-daily-beta-AdvancedSearch',
-    job_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-AdvancedSearch/',
-    build_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-AdvancedSearch/1/',
+    job: 'catalyst-daily-AdvancedSearch',
+    job_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-AdvancedSearch/',
+    build_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-AdvancedSearch/1/',
     status: 'passed', duration_seconds: 120, timestamp: new Date().toISOString(),
     tests: { total: 3, passed: 3, failed: 0, skipped: 0 },
   },
@@ -113,9 +113,9 @@ describe('App – shared steward filter', () => {
     fireEvent.click(within(wrapper).getByRole('button', { name: /All stewards/ }));
     fireEvent.click(screen.getByRole('option', { name: 'Growth' }));
 
-    // Pass/Fail table now only lists the Echo daily-beta build.
-    expect(screen.getByRole('link', { name: 'selenium-daily-beta-Echo' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'selenium-daily-beta-AdvancedSearch' })).toBeNull();
+    // Pass/Fail table now only lists the Echo catalyst-daily build.
+    expect(screen.getByRole('link', { name: 'catalyst-daily-Echo' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'catalyst-daily-AdvancedSearch' })).toBeNull();
 
     // Coverage table narrows to Echo as well (AdvancedSearch/VisualEditor gone).
     const coverageLinks = screen.getAllByRole('link', { name: /Echo/ });

@@ -83,10 +83,10 @@ describe('FlakyTestsPanel', () => {
     it('falls back to job name when repo is missing', () => {
       const dataNoRepo = {
         generatedAt: null,
-        rows: [makeRow({ repo: null, job: 'selenium-daily-beta-Echo', count: 2 })],
+        rows: [makeRow({ repo: null, job: 'catalyst-daily-Echo', count: 2 })],
       };
       render(<FlakyTestsPanel data={dataNoRepo} loading={false} error={null} />);
-      expect(screen.getByText('selenium-daily-beta-Echo')).toBeInTheDocument();
+      expect(screen.getByText('catalyst-daily-Echo')).toBeInTheDocument();
     });
 
     it('falls back to "(unknown)" when both repo and job are missing', () => {

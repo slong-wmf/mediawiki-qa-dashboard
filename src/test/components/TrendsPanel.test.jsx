@@ -85,6 +85,29 @@ describe('TrendsPanel', () => {
     });
   });
 
+  describe('Beta Cluster to Catalyst switch note', () => {
+    it('explains the step change when the window spans the switch date', () => {
+      const data = {
+        windowDays: 90,
+        entries: [makeEntry({ date: '2026-09-15' }), makeEntry({ date: '2026-09-16' })],
+      };
+      render(<TrendsPanel data={data} loading={false} error={null} />);
+      expect(screen.getByText(/On 2026-09-16 the Beta Cluster/)).toBeInTheDocument();
+      expect(screen.getByText('selenium-daily-beta-*')).toBeInTheDocument();
+    });
+
+    it('hides the note when every entry is on one side of the switch date', () => {
+      const before = { windowDays: 90, entries: [makeEntry({ date: '2026-04-28' }), makeEntry({ date: '2026-04-29' })] };
+      const { unmount } = render(<TrendsPanel data={before} loading={false} error={null} />);
+      expect(screen.queryByText(/selenium-daily-beta-\*/)).toBeNull();
+      unmount();
+
+      const after = { windowDays: 90, entries: [makeEntry({ date: '2026-09-16' }), makeEntry({ date: '2026-10-19' })] };
+      render(<TrendsPanel data={after} loading={false} error={null} />);
+      expect(screen.queryByText(/selenium-daily-beta-\*/)).toBeNull();
+    });
+  });
+
   describe('sparse entries', () => {
     it('handles entries where coverage and e2eTestCount are null (backfilled)', () => {
       const data = {

@@ -8,18 +8,34 @@ from four sources — [Wikimedia Jenkins CI](https://integration.wikimedia.org/c
 published on mediawiki.org — and displays them in real-time panels with automatic
 polling and manual refresh.
 
-The **Pass / Fail Rates** panel includes a *Failed jobs* drill-down: click the button
-below the pie chart to expand a per-job breakdown of failures in the past 24 hours —
-failure count, hour-by-hour distribution, a direct link to the most recent failed
-build, and a tail of that build's Jenkins console log. The console tail is lazy-fetched
-from Jenkins on expand and is not available in the static (snapshot) build.
+The **Pass / Fail Rates** panel's default *Test results* view counts WDIO test cases
+from the Catalyst `catalyst-daily-*` jobs; the Beta Cluster `selenium-daily-beta-*`
+jobs are no longer available. The panel also includes a *Failed jobs* drill-down: click
+the button below the pie chart to expand a per-job breakdown of failures in the past
+24 hours — failure count, hour-by-hour distribution, a direct link to the most recent
+failed build, and a tail of that build's Jenkins console log. The console tail is
+lazy-fetched from Jenkins on expand and is not available in the static (snapshot) build.
 
-The **Automated Tests Inventory** panel lists every MediaWiki extension repo that
-publishes browser tests, showing framework (WDIO / Cypress), framework version,
-`wdio-mediawiki` version, gated-selenium status, a 7-day daily-job pass/fail tally,
-and the individual test names. Expand a row to see every test; tests that run in the
-repo's daily Jenkins job are tagged `daily`. The panel honours the shared Steward
-filter.
+The **Automated Tests Inventory** panel lists every MediaWiki repo that publishes
+browser tests (core, extensions, and Wikibase termbox), showing framework
+(WDIO / Cypress), framework version, `wdio-mediawiki` version, gated-selenium status
+(linked to the gated job), a pass/fail tally over the last 7 builds of the repo's
+Catalyst daily job (with a count of runs that passed only on retry), and the individual
+test names. Expand a row to see every test; tests that run in the repo's daily Jenkins
+job are tagged `daily`. The panel honours the shared Steward filter.
+
+Recent changes in the scanner inventory (the same JSON feeds the
+[Automated tests available](https://www.mediawiki.org/wiki/Wikimedia_Quality_Services#Automated_tests_available)
+wiki section):
+
+- Daily selenium jobs run only on Catalyst (`catalyst-daily-*`). The Beta Cluster
+  `selenium-daily-beta-*` jobs left the inventory on 2026-09-16 and no longer exist in
+  Jenkins. The **Trends Over Time** panel notes the resulting step change in its daily
+  metrics.
+- The inventory lists no skins. MinervaNeue, the last skin with browser tests, left the
+  inventory on 2026-10-10.
+- Scanner schema v2 adds a per-job `flaky` count (runs that passed only on retry, `U`)
+  and a top-level `gatedJob` (the gated selenium job).
 
 The **Mobile / iOS Testing Dashboard** panel tracks
 [`wikimedia/wikipedia-ios`](https://github.com/wikimedia/wikipedia-ios) GitHub

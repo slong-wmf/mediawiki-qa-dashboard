@@ -18,9 +18,9 @@
 /** A single valid build record as produced by fetchRecentBuilds(). */
 export function makeValidBuild(overrides = {}) {
   return {
-    job: 'selenium-daily-beta-Echo',
-    job_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/',
-    build_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/42/',
+    job: 'catalyst-daily-Echo',
+    job_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/',
+    build_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/42/',
     status: 'passed',
     duration_seconds: 180,
     timestamp: new Date().toISOString(),

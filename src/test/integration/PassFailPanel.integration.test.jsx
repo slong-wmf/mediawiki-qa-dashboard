@@ -47,7 +47,7 @@ describe('PassFailPanel – integration contract tests', () => {
       const builds = [
         makeValidBuild({ job: 'quibble-php83', status: 'passed', tests: null }),
         makeValidBuild({ job: 'quibble-php83', status: 'failed', tests: null }),
-        makeValidBuild({ job: 'selenium-daily-beta-Echo', status: 'passed' }),
+        makeValidBuild({ job: 'catalyst-daily-Echo', status: 'passed' }),
       ];
       render(<PassFailPanel builds={builds} error={null} loading={false} />);
       expect(screen.getByRole('table')).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe('PassFailPanel – integration contract tests', () => {
           tests: null,
         }),
         makeValidBuild({
-          job: 'selenium-daily-beta-Echo',
+          job: 'catalyst-daily-Echo',
           status: 'passed',
           tests: null,
         }),

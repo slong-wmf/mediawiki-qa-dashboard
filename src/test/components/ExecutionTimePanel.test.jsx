@@ -33,9 +33,9 @@ const BUILDS = [
     tests: null,
   },
   {
-    job: 'selenium-daily-beta-Echo',
-    job_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/',
-    build_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/1/',
+    job: 'catalyst-daily-Echo',
+    job_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/',
+    build_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/1/',
     status: 'passed',
     duration_seconds: 60, // fast — green
     timestamp: new Date().toISOString(),

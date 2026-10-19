@@ -45,9 +45,9 @@ const BUILDS = [
     tests: null,
   },
   {
-    job: 'selenium-daily-beta-Echo',
-    job_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/',
-    build_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/1/',
+    job: 'catalyst-daily-Echo',
+    job_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/',
+    build_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/1/',
     status: 'passed',
     duration_seconds: 60,
     timestamp: new Date().toISOString(),
@@ -125,6 +125,13 @@ describe('PassFailPanel', () => {
       expect(screen.getByText(/Job pass\/fail/i)).toBeInTheDocument();
     });
 
+    it('describes the Test results source as the Catalyst daily jobs', () => {
+      render(<PassFailPanel builds={BUILDS} loading={false} error={null} />);
+      expect(screen.getByText('catalyst-daily-*')).toBeInTheDocument();
+      expect(screen.getByText('selenium-daily-beta-*')).toBeInTheDocument();
+      expect(screen.getByText(/jobs\s+are no longer available/i)).toBeInTheDocument();
+    });
+
     it('shows "no test-report data" when no builds have test data (default view)', () => {
       const noTestBuilds = BUILDS.map((b) => ({ ...b, tests: null }));
       render(<PassFailPanel builds={noTestBuilds} loading={false} error={null} />);
@@ -134,10 +141,10 @@ describe('PassFailPanel', () => {
     it('links each Test results row to the specific build\'s test report, not the latest', () => {
       render(<PassFailPanel builds={BUILDS} loading={false} error={null} />);
       // Default view is already Test results.
-      const link = screen.getByRole('link', { name: 'selenium-daily-beta-Echo' });
+      const link = screen.getByRole('link', { name: 'catalyst-daily-Echo' });
       expect(link).toHaveAttribute(
         'href',
-        'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/1/testReport/',
+        'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/1/testReport/',
       );
       expect(link.getAttribute('href')).not.toContain('lastCompletedBuild');
     });
@@ -196,16 +203,16 @@ describe('PassFailPanel', () => {
         tests: null,
       },
       {
-        job: 'selenium-daily-beta-Echo',
-        job_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/',
-        build_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-Echo/3/',
+        job: 'catalyst-daily-Echo',
+        job_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/',
+        build_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-Echo/3/',
         status: 'passed', duration_seconds: 10, timestamp: new Date().toISOString(),
         tests: { total: 5, passed: 5, failed: 0, skipped: 0 },
       },
       {
-        job: 'selenium-daily-beta-AdvancedSearch',
-        job_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-AdvancedSearch/',
-        build_url: 'https://integration.wikimedia.org/ci/job/selenium-daily-beta-AdvancedSearch/2/',
+        job: 'catalyst-daily-AdvancedSearch',
+        job_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-AdvancedSearch/',
+        build_url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-AdvancedSearch/2/',
         status: 'passed', duration_seconds: 10, timestamp: new Date().toISOString(),
         tests: { total: 3, passed: 3, failed: 0, skipped: 0 },
       },
@@ -221,8 +228,8 @@ describe('PassFailPanel', () => {
           maintainers={maintainers}
         />,
       );
-      expect(screen.getByRole('link', { name: 'selenium-daily-beta-Echo' })).toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: 'selenium-daily-beta-AdvancedSearch' })).toBeNull();
+      expect(screen.getByRole('link', { name: 'catalyst-daily-Echo' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'catalyst-daily-AdvancedSearch' })).toBeNull();
     });
 
     it('excludes core Quibble jobs when any steward is active', () => {
@@ -278,9 +285,9 @@ describe('filterBuildsBySteward', () => {
   ]);
   const builds = [
     { job: 'quibble-php83', build_url: 'https://example/job/quibble-php83/1/' },
-    { job: 'selenium-daily-beta-Echo', build_url: 'https://example/job/selenium-daily-beta-Echo/1/' },
-    { job: 'selenium-daily-beta-AdvancedSearch', build_url: 'https://example/job/selenium-daily-beta-AdvancedSearch/1/' },
-    { job: 'selenium-daily-beta-Unknown', build_url: 'https://example/job/selenium-daily-beta-Unknown/1/' },
+    { job: 'catalyst-daily-Echo', build_url: 'https://example/job/catalyst-daily-Echo/1/' },
+    { job: 'catalyst-daily-AdvancedSearch', build_url: 'https://example/job/catalyst-daily-AdvancedSearch/1/' },
+    { job: 'catalyst-daily-Unknown', build_url: 'https://example/job/catalyst-daily-Unknown/1/' },
   ];
 
   it('returns input unchanged when no stewards selected', async () => {
@@ -294,18 +301,18 @@ describe('filterBuildsBySteward', () => {
     expect(filterBuildsBySteward(builds, ['Growth'], {})).toBe(builds);
   });
 
-  it('keeps only daily-beta builds whose extension maps to a selected steward', async () => {
+  it('keeps only catalyst-daily builds whose extension maps to a selected steward', async () => {
     const { filterBuildsBySteward } = await import('../../components/PassFailPanel.jsx');
     const out = filterBuildsBySteward(builds, ['Growth'], maintainers);
-    expect(out.map((b) => b.job)).toEqual(['selenium-daily-beta-Echo']);
+    expect(out.map((b) => b.job)).toEqual(['catalyst-daily-Echo']);
   });
 
   it('supports multiple selected stewards (union)', async () => {
     const { filterBuildsBySteward } = await import('../../components/PassFailPanel.jsx');
     const out = filterBuildsBySteward(builds, ['Growth', 'WMDE'], maintainers);
     expect(out.map((b) => b.job)).toEqual([
-      'selenium-daily-beta-Echo',
-      'selenium-daily-beta-AdvancedSearch',
+      'catalyst-daily-Echo',
+      'catalyst-daily-AdvancedSearch',
     ]);
   });
 
@@ -314,10 +321,20 @@ describe('filterBuildsBySteward', () => {
     expect(filterBuildsBySteward(builds, ['NoSuchSteward'], maintainers)).toEqual([]);
   });
 
+  it('does not map Beta Cluster selenium-daily-beta-* builds (those jobs no longer exist)', async () => {
+    const { filterBuildsBySteward } = await import('../../components/PassFailPanel.jsx');
+    const out = filterBuildsBySteward(
+      [{ job: 'selenium-daily-beta-Echo', build_url: 'https://example/job/selenium-daily-beta-Echo/1/' }],
+      ['Growth'],
+      maintainers,
+    );
+    expect(out).toEqual([]);
+  });
+
   it('falls back to the `job` field when build_url is missing', async () => {
     const { filterBuildsBySteward } = await import('../../components/PassFailPanel.jsx');
     const out = filterBuildsBySteward(
-      [{ job: 'selenium-daily-beta-Echo' }],
+      [{ job: 'catalyst-daily-Echo' }],
       ['Growth'],
       maintainers,
     );

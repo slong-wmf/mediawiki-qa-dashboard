@@ -3,6 +3,7 @@ import {
   fetchAutomatedTests,
   normaliseEnvelope,
   normaliseFramework,
+  normaliseGatedJob,
   shortRepoName,
 } from '../../services/automatedTests.js';
 
@@ -118,6 +119,57 @@ describe('normaliseEnvelope', () => {
       testCount: 0,
       tests: [],
     });
+  });
+
+  it('keeps the schema v2 gatedJob and per-job flaky count', () => {
+    const result = normaliseEnvelope({
+      schemaVersion: 2,
+      gatedJob: {
+        name: 'quibble-with-gated-extensions-selenium-php83',
+        url: 'https://integration.wikimedia.org/ci/job/quibble-with-gated-extensions-selenium-php83/',
+      },
+      repos: [{
+        repo: 'mediawiki/extensions/AdvancedSearch',
+        dailyJobs: [{
+          name: 'catalyst-daily-AdvancedSearch',
+          url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-AdvancedSearch/',
+          passes: 5, flaky: 3, fails: 2, total: 7,
+          results: ['U', 'F', 'U', 'F', 'P', 'U', 'P'],
+        }],
+      }],
+    });
+    expect(result.gatedJob).toEqual({
+      name: 'quibble-with-gated-extensions-selenium-php83',
+      url: 'https://integration.wikimedia.org/ci/job/quibble-with-gated-extensions-selenium-php83/',
+    });
+    expect(result.repos[0].daily).toBe(true);
+    expect(result.repos[0].dailyJobs[0]).toMatchObject({ name: 'catalyst-daily-AdvancedSearch', flaky: 3 });
+  });
+
+  it('sets gatedJob to null when the scanner does not emit it', () => {
+    expect(normaliseEnvelope({ repos: [] }).gatedJob).toBeNull();
+  });
+});
+
+// ── normaliseGatedJob ────────────────────────────────────────────────────────
+
+describe('normaliseGatedJob', () => {
+  it('returns name and url', () => {
+    expect(normaliseGatedJob({ name: 'gated', url: 'https://example/job/gated/' }))
+      .toEqual({ name: 'gated', url: 'https://example/job/gated/' });
+  });
+
+  it('sets url to null when it is missing or blank', () => {
+    expect(normaliseGatedJob({ name: 'gated' })).toEqual({ name: 'gated', url: null });
+    expect(normaliseGatedJob({ name: 'gated', url: '  ' })).toEqual({ name: 'gated', url: null });
+  });
+
+  it('returns null for malformed input', () => {
+    expect(normaliseGatedJob(null)).toBeNull();
+    expect(normaliseGatedJob('gated')).toBeNull();
+    expect(normaliseGatedJob({})).toBeNull();
+    expect(normaliseGatedJob({ name: '' })).toBeNull();
+    expect(normaliseGatedJob({ name: 42 })).toBeNull();
   });
 });
 

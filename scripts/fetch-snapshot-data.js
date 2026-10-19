@@ -118,6 +118,9 @@ const PAGE_LIMIT      = 100;
 const MAX_PAGES       = 2;
 const BUILDS_PER_JOB  = 20;
 const JENKINS_VIEWS   = ['Selenium', 'selenium-daily'];
+// Same value as DAILY_JOB_PREFIX in src/services/jenkins.js. The daily jobs
+// run on Catalyst. The Beta Cluster jobs (selenium-daily-beta-*) do not exist now.
+const DAILY_JOB_PREFIX = 'catalyst-daily-';
 const TRAIN_PHID      = 'PHID-PROJ-fmcvjrkfvvzz3gxavs3a';
 
 // GitHub mobile-app fetchers. Output shapes match
@@ -248,7 +251,7 @@ async function fetchJenkinsData() {
     for (const job of view.jobs ?? []) {
       if (!job.name || seen.has(job.name)) continue;
       seen.add(job.name);
-      const hasTestReport = job.name.startsWith('selenium-daily-beta-');
+      const hasTestReport = job.name.startsWith(DAILY_JOB_PREFIX);
       jobs.push({ label: job.name, slug: job.name, hasTestReport });
 
       const jobUrl = `${JENKINS_BASE}/job/${job.name}/`;
@@ -546,6 +549,15 @@ function normaliseTestRepo(raw) {
   };
 }
 
+// Same logic as normaliseGatedJob in src/services/automatedTests.js.
+function normaliseGatedJob(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.name !== 'string' || !raw.name.trim()) return null;
+  return {
+    name: raw.name,
+    url: typeof raw.url === 'string' && raw.url.trim() ? raw.url : null,
+  };
+}
+
 // ── Flaky tests (releng-data Datasette) ──────────────────────────────────────
 
 const FLAKY_TESTS_URL =
@@ -598,9 +610,10 @@ async function fetchAutomatedTests() {
     : repos.reduce((n, r) => n + r.testCount, 0);
   const repoCount = typeof envelope?.repoCount === 'number' ? envelope.repoCount : repos.length;
   const generatedAt = typeof envelope?.generatedAt === 'string' ? envelope.generatedAt : null;
+  const gatedJob = normaliseGatedJob(envelope?.gatedJob);
 
   console.log(`  ${repos.length} repos, ${testCount} tests`);
-  return { generatedAt, repoCount, testCount, repos };
+  return { generatedAt, repoCount, testCount, gatedJob, repos };
 }
 
 // ── Maintainers ───────────────────────────────────────────────────────────────
@@ -1203,7 +1216,7 @@ async function main() {
   } catch (err) {
     console.error(`  ✗ Automated tests failed: ${err.message}`);
     errors.push('automated-tests');
-    save('automated-tests.json', { generatedAt: null, repoCount: 0, testCount: 0, repos: [] });
+    save('automated-tests.json', { generatedAt: null, repoCount: 0, testCount: 0, gatedJob: null, repos: [] });
   }
 
   // Rolling-history aggregate for the Trends Over Time panel. Reads any

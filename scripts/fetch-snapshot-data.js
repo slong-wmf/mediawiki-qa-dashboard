@@ -60,6 +60,7 @@ import {
   buildIosTestingDashboard,
   isCoverageRunForSuite,
 } from '../src/services/github/iosTestingCore.js';
+import { MAINTAINERS_API_URL, parseServiceCatalog } from '../src/services/maintainersCore.js';
 import {
   fetchFlakyTestRows,
   AnubisChallengeError,
@@ -606,9 +607,8 @@ async function fetchAutomatedTests() {
 // ── Maintainers ───────────────────────────────────────────────────────────────
 
 async function fetchMaintainers() {
-  console.log('\n📦 Maintainers: fetching from mediawiki.org...');
-  const url = 'https://www.mediawiki.org/w/api.php?action=parse&page=Developers/Maintainers&prop=text&format=json&origin=*';
-  const res = await fetchWithRetry(url);
+  console.log('\n📦 Maintainers: fetching the Service Catalog from mediawiki.org...');
+  const res = await fetchWithRetry(MAINTAINERS_API_URL);
   if (!res.ok) throw new Error(`Maintainers fetch failed: ${res.status} ${res.statusText}`);
 
   const json = await res.json();
@@ -616,30 +616,14 @@ async function fetchMaintainers() {
   if (!html) throw new Error('Maintainers page returned no HTML content');
 
   const { document } = parseHTML(html);
-  const result = {};
-
-  for (const table of document.querySelectorAll('table.wikitable')) {
-    const headerRow = table.querySelector('tr');
-    if (!headerRow) continue;
-    const headers = [...headerRow.querySelectorAll('th')].map((th) => th.textContent.trim().toLowerCase());
-    const idxSteward    = headers.findIndex((h) => h.includes('steward'));
-    const idxMaintainer = headers.findIndex((h) => h.includes('individual'));
-    if (idxSteward < 0) continue;
-
-    for (const row of table.querySelectorAll('tr')) {
-      const cells   = [...row.querySelectorAll('td')];
-      if (!cells.length) continue;
-      const extLink = cells[0]?.querySelector('a[href*="Extension:"]');
-      if (!extLink) continue;
-      const extName    = extLink.textContent.trim();
-      const steward    = cells[idxSteward]?.textContent?.trim()   ?? '';
-      const maintainer = idxMaintainer >= 0 ? cells[idxMaintainer]?.textContent?.trim() ?? '' : '';
-      result[extName] = { steward, maintainer };
-    }
-  }
-
-  console.log(`  ${Object.keys(result).length} extensions parsed`);
   // Return a plain object — JSON can't serialize Map, frontend reconstructs via new Map(Object.entries(json))
+  const result = Object.fromEntries(parseServiceCatalog(document));
+  const count = Object.keys(result).length;
+  // If the page has no extension rows, its title or table layout changed.
+  // Report this as an error, so that the run does not save an empty file as
+  // a success.
+  if (count === 0) throw new Error('Service Catalog page has no extension rows');
+  console.log(`  ${count} extensions parsed`);
   return result;
 }
 

@@ -2,7 +2,7 @@
  * @file useDashboardData.js
  * Custom React hook that fetches and manages data from all dashboard
  * data sources: Wikimedia Jenkins CI, Wikimedia coverage index, Phabricator
- * Maniphest, and the MediaWiki Developers/Maintainers wiki page.
+ * Maniphest, and the Wikimedia Production/Service Catalog wiki page.
  *
  * All sources are fetched in parallel via Promise.allSettled so a failure
  * from one does not prevent the others from rendering.
@@ -59,7 +59,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS) || 
 
 /**
  * Fetches data from Jenkins, the Wikimedia coverage index, Phabricator, and
- * the Developers/Maintainers wiki page in parallel. Returns state and manual
+ * the Service Catalog wiki page in parallel. Returns state and manual
  * refresh functions.
  *
  * @returns {DashboardData}

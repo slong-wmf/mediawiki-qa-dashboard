@@ -1,29 +1,30 @@
 /**
  * @file maintainers.js
- * Fetches the Wikimedia Developers/Maintainers wiki page and parses the
- * HTML extension table into a lookup of extension name → steward/maintainer.
+ * Fetches the Wikimedia Production/Service Catalog wiki page and parses its
+ * extension rows into a lookup of extension name → steward/maintainer.
  *
  * The MediaWiki Action API supports CORS with origin=*, so no Vite proxy is
  * needed — the request goes directly from the browser.
  *
- * Source page: https://www.mediawiki.org/wiki/Developers/Maintainers
+ * Source page: https://www.mediawiki.org/wiki/Wikimedia_Production/Service_Catalog
+ * (Developers/Maintainers is now a redirect to it.)
  */
 
 import { USE_STATIC_DATA, fetchStaticJson } from './staticData.js';
-
-const MAINTAINERS_API_URL =
-  'https://www.mediawiki.org/w/api.php' +
-  '?action=parse&page=Developers/Maintainers&prop=text&format=json&origin=*';
+import { MAINTAINERS_API_URL, parseServiceCatalog } from './maintainersCore.js';
 
 /**
  * @typedef {Object} MaintainerEntry
- * @property {string} steward            - Team or org with professional responsibility (may be empty)
- * @property {string} maintainer         - Individual maintainer name(s) (may be empty)
+ * @property {string} steward            - Development / Maintenance team in the Service Catalog (may be empty)
+ * @property {string} maintainer         - Volunteer developer name(s) (may be empty)
  */
 
 /**
- * Fetch the Developers/Maintainers page and return a map from extension name
- * to its steward and individual maintainer.
+ * Fetch the Service Catalog page and return a map from extension name to its
+ * steward and maintainer.
+ *
+ * An empty result is an error. It shows that the page or its table layout
+ * changed, and the steward filter then shows "Steward info unavailable".
  *
  * @returns {Promise<Map<string, MaintainerEntry>>}
  */
@@ -32,7 +33,9 @@ export async function fetchMaintainers() {
     // Snapshot is stored as a plain object (JSON can't represent Maps).
     // Reconstruct as Map<extName, { steward, maintainer }>.
     const json = await fetchStaticJson('maintainers.json');
-    return new Map(Object.entries(json));
+    const map = new Map(Object.entries(json ?? {}));
+    if (map.size === 0) throw new Error('Maintainers snapshot has no extensions');
+    return map;
   }
   const res = await fetch(MAINTAINERS_API_URL);
   if (!res.ok) {
@@ -41,60 +44,9 @@ export async function fetchMaintainers() {
   const json = await res.json();
   const html = json?.parse?.text?.['*'];
   if (!html) throw new Error('Maintainers page returned no HTML content');
-  return parseMaintainersHTML(html);
-}
-
-/**
- * Parse the rendered HTML of the Developers/Maintainers page into a Map.
- *
- * The page contains a wikitable with columns:
- *   Extension | Description | Steward | Individual maintainer | Consultants
- *
- * Extension name cells contain an anchor whose href includes "Extension:" —
- * this is the reliable signal that a row represents an extension (not a core
- * component or skin).
- *
- * @param {string} html  Raw HTML string from the MediaWiki parse API
- * @returns {Map<string, MaintainerEntry>}
- */
-function parseMaintainersHTML(html) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const result = new Map();
-
-  for (const table of doc.querySelectorAll('table.wikitable')) {
-    // Locate column indices from the header row
-    const headerRow = table.querySelector('tr');
-    if (!headerRow) continue;
-
-    const headers = [...headerRow.querySelectorAll('th')].map(
-      (th) => th.textContent.trim().toLowerCase(),
-    );
-
-    const idxSteward    = headers.findIndex((h) => h.includes('steward'));
-    const idxMaintainer = headers.findIndex((h) => h.includes('individual'));
-
-    if (idxSteward < 0) continue; // not the extensions table
-
-    for (const row of table.querySelectorAll('tr')) {
-      const cells = [...row.querySelectorAll('td')];
-      if (!cells.length) continue;
-
-      // Only extension rows have a link whose href contains "Extension:"
-      const extLink = cells[0]?.querySelector('a[href*="Extension:"]');
-      if (!extLink) continue;
-
-      const extName   = extLink.textContent.trim();
-      const steward   = cells[idxSteward]?.textContent?.trim()   ?? '';
-      const maintainer = idxMaintainer >= 0
-        ? cells[idxMaintainer]?.textContent?.trim() ?? ''
-        : '';
-
-      result.set(extName, { steward, maintainer });
-    }
-  }
-
-  return result;
+  const map = parseServiceCatalog(new DOMParser().parseFromString(html, 'text/html'));
+  if (map.size === 0) throw new Error('Service Catalog page has no extension rows');
+  return map;
 }
 
 /**

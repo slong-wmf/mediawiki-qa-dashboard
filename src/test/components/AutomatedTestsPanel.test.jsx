@@ -124,6 +124,81 @@ describe('AutomatedTestsPanel', () => {
       expect(screen.getByText('Echo')).toBeInTheDocument();
     });
   });
+
+  describe('Catalyst daily jobs, gated job and skins', () => {
+    const GATED_JOB = {
+      name: 'quibble-with-gated-extensions-selenium-php83',
+      url: 'https://integration.wikimedia.org/ci/job/quibble-with-gated-extensions-selenium-php83/',
+    };
+
+    it('notes that daily jobs run on Catalyst and that the scanner lists no skins', () => {
+      render(<AutomatedTestsPanel data={DATA} error={null} loading={false} />);
+      expect(screen.getByText(/Daily jobs run on Catalyst/)).toBeInTheDocument();
+      expect(screen.getByText('selenium-daily-beta-*')).toBeInTheDocument();
+      expect(screen.getByText(/lists no skins with browser tests/)).toBeInTheDocument();
+    });
+
+    it('omits the skins sentence when the scanner reports a skin repo', () => {
+      const data = {
+        ...DATA,
+        repos: [...DATA.repos, makeRepo({ name: 'MinervaNeue', repoPath: 'mediawiki/skins/MinervaNeue' })],
+      };
+      render(<AutomatedTestsPanel data={data} error={null} loading={false} />);
+      expect(screen.getByText(/Daily jobs run on Catalyst/)).toBeInTheDocument();
+      expect(screen.queryByText(/lists no skins with browser tests/)).not.toBeInTheDocument();
+    });
+
+    it('links the gated marker to the gated selenium job', () => {
+      render(<AutomatedTestsPanel data={{ ...DATA, gatedJob: GATED_JOB }} error={null} loading={false} />);
+      // Only AbuseFilter is gated in DATA.
+      const links = screen.getAllByTitle(`Gated selenium: ${GATED_JOB.name}`);
+      expect(links).toHaveLength(1);
+      expect(links[0]).toHaveAttribute('href', GATED_JOB.url);
+    });
+
+    it('keeps the gated marker as plain text when the scanner sends no gatedJob', () => {
+      render(<AutomatedTestsPanel data={DATA} error={null} loading={false} />);
+      expect(screen.getByTitle('Gated selenium').tagName).toBe('SPAN');
+    });
+
+    it('labels the daily column Catalyst and shows the flaky count', () => {
+      const data = {
+        ...DATA,
+        repos: [
+          makeRepo({
+            name: 'AdvancedSearch',
+            dailyJobs: [{
+              name: 'catalyst-daily-AdvancedSearch',
+              url: 'https://integration.wikimedia.org/ci/job/catalyst-daily-AdvancedSearch/',
+              passes: 5, flaky: 3, fails: 2, total: 7,
+              results: ['U', 'F', 'U', 'F', 'P', 'U', 'P'],
+            }],
+          }),
+        ],
+      };
+      render(<AutomatedTestsPanel data={data} error={null} loading={false} />);
+      expect(screen.getByText('Catalyst (7d)')).toBeInTheDocument();
+      expect(screen.getByText('5/7')).toBeInTheDocument();
+      expect(screen.getByText('3 flaky')).toHaveAttribute('title', '3 of 7 runs passed only on retry');
+    });
+
+    it('hides the flaky count when no run needed a retry', () => {
+      const data = {
+        ...DATA,
+        repos: [
+          makeRepo({
+            dailyJobs: [{
+              name: 'catalyst-daily-AbuseFilter', url: 'https://example/', passes: 7, flaky: 0, fails: 0, total: 7,
+              results: ['P', 'P', 'P', 'P', 'P', 'P', 'P'],
+            }],
+          }),
+        ],
+      };
+      render(<AutomatedTestsPanel data={data} error={null} loading={false} />);
+      expect(screen.getByText('7/7')).toBeInTheDocument();
+      expect(screen.queryByText(/flaky/)).not.toBeInTheDocument();
+    });
+  });
 });
 
 // ── filterReposBySteward unit tests ──────────────────────────────────────────

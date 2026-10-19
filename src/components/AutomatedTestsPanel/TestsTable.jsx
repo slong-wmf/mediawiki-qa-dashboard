@@ -18,7 +18,7 @@ export function aggregatePassRate(repo) {
 
 function PassRateCell({ rate }) {
   if (rate == null) {
-    return <span className="text-gray-600" title="No daily Jenkins job">—</span>;
+    return <span className="text-gray-600" title="No Catalyst daily job">—</span>;
   }
   const pct = Math.round(rate * 100);
   const colour =
@@ -30,7 +30,7 @@ function PassRateCell({ rate }) {
 
 function DailyCell({ jobs }) {
   if (!Array.isArray(jobs) || jobs.length === 0) {
-    return <span className="text-gray-600" title="No daily Jenkins job">—</span>;
+    return <span className="text-gray-600" title="No Catalyst daily job">—</span>;
   }
   return (
     <div className="flex flex-col gap-0.5 font-mono">
@@ -45,6 +45,7 @@ function DailyCell({ jobs }) {
         const allPass = j.passes === j.total;
         const countColour = allPass ? 'text-emerald-300' : 'text-rose-300';
         const results = Array.isArray(j.results) ? j.results : [];
+        const flaky = typeof j.flaky === 'number' ? j.flaky : 0;
         return (
           <a
             key={j.name}
@@ -56,6 +57,14 @@ function DailyCell({ jobs }) {
             onClick={(e) => e.stopPropagation()}
           >
             <span className={countColour}>{j.passes}/{j.total}</span>
+            {flaky > 0 && (
+              <span
+                className="ml-1.5 text-orange-400"
+                title={`${flaky} of ${j.total} runs passed only on retry`}
+              >
+                {flaky} flaky
+              </span>
+            )}
             {results.length > 0 && (
               <span className="ml-1.5 tracking-tight">
                 {results.map((r, i) => (
@@ -93,8 +102,11 @@ const FRAMEWORK_CLASS = {
  * test names. Columns: Repo, Framework, Version, MW version, Gated, Tests.
  *
  * Sort is handled locally — click a header to toggle direction.
+ *
+ * `gatedJob` is the gated selenium job from the scanner. If the scanner sends
+ * it, the Gated column links to that job.
  */
-export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = false }) {
+export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = false, gatedJob = null }) {
   const [sortKey, setSortKey] = useState('testCount');
   const [sortDir, setSortDir] = useState('desc');
   const [expanded, setExpanded] = useState(null);
@@ -164,9 +176,9 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
             {header('framework', 'Framework')}
             {header('frameworkVersion', 'Version')}
             {header('mediawikiVersion', 'wdio-mediawiki version')}
-            {header('gatedSelenium', 'Gated')}
-            {header('passRate', 'Pass Rate', 'right', 'Aggregate pass rate across all of the repo’s daily Jenkins jobs over the past 7 days. Retries that pass (U) count as passes.')}
-            {header('daily', 'Daily (7d)', 'left', 'P = passed, U = passed on retry (Jenkins UNSTABLE; counted as a pass), F = failed')}
+            {header('gatedSelenium', 'Gated', 'left', gatedJob ? `Gated selenium: ● when the repo’s selenium tests run in the gated ${gatedJob.name} CI job. The ● links to the job.` : null)}
+            {header('passRate', 'Pass Rate', 'right', 'Aggregate pass rate across the repo’s Catalyst daily jobs over their last 7 completed builds. Retries that pass (U) count as passes.')}
+            {header('daily', 'Catalyst (7d)', 'left', 'Pass/total over the last 7 completed builds of the repo’s catalyst-daily-* job, which runs its tests daily against a Catalyst environment. P = passed, U = passed on retry (Jenkins UNSTABLE; counted as a pass), F = failed. “N flaky” counts the U runs. The Beta Cluster selenium-daily-beta-* jobs are no longer available.')}
             {header('testCount', 'Tests', 'right')}
           </tr>
         </thead>
@@ -203,7 +215,18 @@ export function TestsTable({ repos, maxHeightClass = 'max-h-96', forceExpand = f
                   <td className="py-1 pr-3 text-gray-300 font-mono">{repo.frameworkVersion ?? '—'}</td>
                   <td className="py-1 pr-3 text-gray-300 font-mono">{repo.mediawikiVersion ?? '—'}</td>
                   <td className="py-1 pr-3">
-                    {repo.gatedSelenium ? (
+                    {repo.gatedSelenium && gatedJob?.url ? (
+                      <a
+                        href={gatedJob.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-300 hover:text-amber-200"
+                        title={`Gated selenium: ${gatedJob.name}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        ●
+                      </a>
+                    ) : repo.gatedSelenium ? (
                       <span className="text-amber-300" title="Gated selenium">●</span>
                     ) : (
                       <span className="text-gray-600" title="Not gated">○</span>

@@ -38,7 +38,7 @@ describe('ExecutionTimePanel – integration contract tests', () => {
       const builds = [
         makeValidBuild({ job: 'quibble-php83', duration_seconds: 400 }),
         makeValidBuild({ job: 'quibble-php83', duration_seconds: 350 }),
-        makeValidBuild({ job: 'selenium-daily-beta-Echo', duration_seconds: 200 }),
+        makeValidBuild({ job: 'catalyst-daily-Echo', duration_seconds: 200 }),
       ];
       render(<ExecutionTimePanel builds={builds} error={null} loading={false} />);
       expect(screen.getByTestId('bar-chart')).toBeInTheDocument();

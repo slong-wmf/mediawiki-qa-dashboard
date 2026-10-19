@@ -150,8 +150,9 @@ export function upsertHistoryEntry(entries, today, opts = {}) {
 
 /**
  * Synthesise up to 7 historical entries from the existing dailyJobs.results
- * arrays. The browser-test-scanner records P/F flags for the last 7 days
+ * arrays. The browser-test-scanner records P/U/F flags for the last 7 days
  * (oldest → newest); we walk that array per job and roll daily aggregates.
+ * A 'U' flag (passed on retry) counts as a pass, as in the scanner.
  *
  * Fields without a 7-day source (coverage, E2E count) are null on backfilled
  * entries, which TrendChart renders as gaps. The most-recent day is excluded
@@ -181,14 +182,15 @@ export function backfillFromDailyJobs(automatedTests, opts = {}) {
       results.forEach((flag, i) => {
         const dayOffset = len - 1 - i; // 0 = most recent
         if (dayOffset === 0) return; // skip "today" — covered by live aggregator
-        if (flag !== 'P' && flag !== 'F') return;
+        // 'U' is a run that passed on retry. The scanner counts it as a pass.
+        if (flag !== 'P' && flag !== 'U' && flag !== 'F') return;
         if (!dayBuckets.has(dayOffset)) {
           dayBuckets.set(dayOffset, { passes: 0, fails: 0, total: 0 });
         }
         const bucket = dayBuckets.get(dayOffset);
         bucket.total += perDay;
-        if (flag === 'P') bucket.passes += perDay;
-        else bucket.fails += perDay;
+        if (flag === 'F') bucket.fails += perDay;
+        else bucket.passes += perDay;
       });
     }
   }

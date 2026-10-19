@@ -18,13 +18,19 @@ const BASE_URL = '/api/jenkins';
 const JENKINS_VIEWS = ['Selenium', 'selenium-daily'];
 
 /**
+ * Name prefix of the daily per-repo Selenium jobs. These jobs run on Catalyst.
+ * The Beta Cluster jobs (selenium-daily-beta-*) do not exist now.
+ */
+export const DAILY_JOB_PREFIX = 'catalyst-daily-';
+
+/**
  * Default (static) job list used when fetchTrackedJobs() has not been called.
  *
  * Jobs sourced from the Selenium and Selenium-daily Jenkins views:
  *   https://integration.wikimedia.org/ci/view/Selenium/
  *   https://integration.wikimedia.org/ci/view/selenium-daily/
  *
- * Only jobs that had at least one build as of 2026-04-03 are included.
+ * This list includes only the jobs that had one or more builds by 2026-10-19.
  *
  * `hasTestReport: true` means the job publishes a JUnit TestResultAction,
  * allowing test-level pass/fail counts to be surfaced in addition to the
@@ -32,26 +38,42 @@ const JENKINS_VIEWS = ['Selenium', 'selenium-daily'];
  */
 export const DEFAULT_TRACKED_JOBS = [
   // ── Core Selenium (Quibble) ────────────────────────────────────────────────
-  { label: 'Selenium PHP 8.1',         slug: 'quibble-composer-mysql-php81-selenium',              hasTestReport: false },
-  { label: 'Selenium PHP 8.2',         slug: 'quibble-composer-mysql-php82-selenium',              hasTestReport: false },
-  { label: 'Selenium PHP 8.3',         slug: 'quibble-composer-mysql-php83-selenium',              hasTestReport: false },
-  { label: 'Selenium Vendor PHP 8.1',  slug: 'quibble-vendor-mysql-php81-selenium',               hasTestReport: false },
-  { label: 'Selenium Vendor PHP 8.3',  slug: 'quibble-vendor-mysql-php83-selenium',               hasTestReport: false },
-  { label: 'Selenium Gated Ext',       slug: 'quibble-with-gated-extensions-selenium-php83',      hasTestReport: false },
-  { label: 'Wikibase Selenium',        slug: 'wikibase-selenium',                                 hasTestReport: false },
-  // ── Selenium-daily (beta cluster, per-extension WDIO) ─────────────────────
-  // These jobs publish a JUnit TestResultAction — test-level counts are available.
-  { label: 'AdvancedSearch (daily)',   slug: 'selenium-daily-beta-AdvancedSearch',                hasTestReport: true  },
-  { label: 'CampaignEvents (daily)',   slug: 'selenium-daily-beta-CampaignEvents',                hasTestReport: true  },
-  { label: 'CentralNotice (daily)',    slug: 'selenium-daily-beta-CentralNotice',                 hasTestReport: true  },
-  { label: 'Echo (daily)',             slug: 'selenium-daily-beta-Echo',                          hasTestReport: true  },
-  { label: 'Math (daily)',             slug: 'selenium-daily-beta-Math',                          hasTestReport: true  },
-  { label: 'Minerva (daily)',          slug: 'selenium-daily-beta-Minerva',                       hasTestReport: true  },
-  { label: 'Newsletter (daily)',       slug: 'selenium-daily-beta-Newsletter',                    hasTestReport: true  },
-  { label: 'Popups (daily)',           slug: 'selenium-daily-beta-Popups',                        hasTestReport: true  },
-  { label: 'RelatedArticles (daily)',  slug: 'selenium-daily-beta-RelatedArticles',               hasTestReport: true  },
-  { label: 'TwoColConflict (daily)',   slug: 'selenium-daily-beta-TwoColConflict',                hasTestReport: true  },
-  { label: 'VisualEditor (daily)',     slug: 'selenium-daily-beta-VisualEditor',                  hasTestReport: true  },
+  { label: 'Selenium PHP 8.3',           slug: 'quibble-composer-mysql-php83-selenium',        hasTestReport: false },
+  { label: 'Selenium Vendor PHP 8.3',    slug: 'quibble-vendor-mysql-php83-selenium',          hasTestReport: false },
+  { label: 'Selenium Gated Ext',         slug: 'quibble-with-gated-extensions-selenium-php83', hasTestReport: false },
+  // ── Selenium-daily (Catalyst, per-repo WDIO) ───────────────────────────────
+  // All these jobs, except termbox and Wikibase, publish a JUnit TestResultAction.
+  { label: 'AbuseFilter (daily)',        slug: 'catalyst-daily-AbuseFilter',                   hasTestReport: true  },
+  { label: 'AchievementBadges (daily)',  slug: 'catalyst-daily-AchievementBadges',             hasTestReport: true  },
+  { label: 'AdvancedSearch (daily)',     slug: 'catalyst-daily-AdvancedSearch',                hasTestReport: true  },
+  { label: 'CampaignEvents (daily)',     slug: 'catalyst-daily-CampaignEvents',                hasTestReport: true  },
+  { label: 'Cargo (daily)',              slug: 'catalyst-daily-Cargo',                         hasTestReport: true  },
+  { label: 'CentralNotice (daily)',      slug: 'catalyst-daily-CentralNotice',                 hasTestReport: true  },
+  { label: 'CodeMirror (daily)',         slug: 'catalyst-daily-CodeMirror',                    hasTestReport: true  },
+  { label: 'CommunityRequests (daily)',  slug: 'catalyst-daily-CommunityRequests',             hasTestReport: true  },
+  { label: 'ContactPage (daily)',        slug: 'catalyst-daily-ContactPage',                   hasTestReport: true  },
+  { label: 'core (daily)',               slug: 'catalyst-daily-core',                          hasTestReport: true  },
+  { label: 'Echo (daily)',               slug: 'catalyst-daily-Echo',                          hasTestReport: true  },
+  { label: 'ElectronPdfService (daily)', slug: 'catalyst-daily-ElectronPdfService',            hasTestReport: true  },
+  { label: 'examples (daily)',           slug: 'catalyst-daily-examples',                      hasTestReport: true  },
+  { label: 'GlobalWatchlist (daily)',    slug: 'catalyst-daily-GlobalWatchlist',               hasTestReport: true  },
+  { label: 'Math (daily)',               slug: 'catalyst-daily-Math',                          hasTestReport: true  },
+  { label: 'Newsletter (daily)',         slug: 'catalyst-daily-Newsletter',                    hasTestReport: true  },
+  { label: 'PageTriage (daily)',         slug: 'catalyst-daily-PageTriage',                    hasTestReport: true  },
+  { label: 'ParserMigration (daily)',    slug: 'catalyst-daily-ParserMigration',               hasTestReport: true  },
+  { label: 'Popups (daily)',             slug: 'catalyst-daily-Popups',                        hasTestReport: true  },
+  { label: 'ProofreadPage (daily)',      slug: 'catalyst-daily-ProofreadPage',                 hasTestReport: true  },
+  { label: 'ReportIncident (daily)',     slug: 'catalyst-daily-ReportIncident',                hasTestReport: true  },
+  { label: 'RevisionSlider (daily)',     slug: 'catalyst-daily-RevisionSlider',                hasTestReport: true  },
+  { label: 'Sanctions (daily)',          slug: 'catalyst-daily-Sanctions',                     hasTestReport: true  },
+  { label: 'TemplateData (daily)',       slug: 'catalyst-daily-TemplateData',                  hasTestReport: true  },
+  { label: 'TemplateWizard (daily)',     slug: 'catalyst-daily-TemplateWizard',                hasTestReport: true  },
+  { label: 'termbox (daily)',            slug: 'catalyst-daily-termbox',                       hasTestReport: false },
+  { label: 'TwoColConflict (daily)',     slug: 'catalyst-daily-TwoColConflict',                hasTestReport: true  },
+  { label: 'VisualEditor (daily)',       slug: 'catalyst-daily-VisualEditor',                  hasTestReport: true  },
+  { label: 'Wikibase (daily)',           slug: 'catalyst-daily-Wikibase',                      hasTestReport: false },
+  // This job also runs daily on Catalyst. It does not publish a JUnit report.
+  { label: 'WikiLambda E2E (daily)',     slug: 'wikilambda-catalyst-end-to-end-daily',         hasTestReport: false },
 ];
 
 /** How many recent builds to fetch per job. */
@@ -148,9 +170,9 @@ async function fetchJobBuilds({ label, slug, hasTestReport }) {
  * same job descriptor format used by fetchRecentBuilds(). This allows the
  * dashboard to pick up newly added or removed jobs without a code change.
  *
- * hasTestReport is inferred from the job name: jobs matching the
- * `selenium-daily-beta-*` pattern publish a JUnit TestResultAction; all others
- * report job-level results only.
+ * hasTestReport comes from the job name. Only the Catalyst `catalyst-daily-*`
+ * jobs publish a JUnit TestResultAction. All other jobs report job-level
+ * results only.
  *
  * @returns {Promise<Array<{ label: string, slug: string, hasTestReport: boolean }>>}
  * @throws {Error} When all view requests fail or the combined result is empty.
@@ -176,8 +198,8 @@ export async function fetchTrackedJobs() {
     .map((job) => ({
       label: job.name,
       slug: job.name,
-      // selenium-daily-beta-* jobs publish a JUnit TestResultAction
-      hasTestReport: job.name.startsWith('selenium-daily-beta-'),
+      // Only catalyst-daily-* jobs publish a JUnit TestResultAction.
+      hasTestReport: job.name.startsWith(DAILY_JOB_PREFIX),
     }));
 
   if (jobs.length === 0) {

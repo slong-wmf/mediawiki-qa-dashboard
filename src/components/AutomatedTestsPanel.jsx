@@ -78,6 +78,9 @@ export default function AutomatedTestsPanel({
   const [query, setQuery] = useState('');
 
   const allRepos = Array.isArray(data?.repos) ? data.repos : [];
+  const hasSkinRepos = allRepos.some(
+    (r) => typeof r?.repoPath === 'string' && r.repoPath.startsWith('mediawiki/skins/'),
+  );
 
   const stewardFilteredRepos = useMemo(
     () => filterReposBySteward(allRepos, activeStewards, maintainers),
@@ -148,7 +151,11 @@ export default function AutomatedTestsPanel({
       </div>
 
       {visibleRepos.length > 0 ? (
-        <TestsTable repos={visibleRepos} forceExpand={query.trim().length > 0} />
+        <TestsTable
+          repos={visibleRepos}
+          forceExpand={query.trim().length > 0}
+          gatedJob={data.gatedJob ?? null}
+        />
       ) : (
         <p className="text-gray-500 text-xs italic">
           {query.trim()
@@ -156,6 +163,12 @@ export default function AutomatedTestsPanel({
             : 'No repos match the current filter.'}
         </p>
       )}
+
+      <p className="text-xs text-gray-500 text-center">
+        Daily jobs run on Catalyst. The Beta Cluster{' '}
+        <span className="font-mono">selenium-daily-beta-*</span> jobs are no longer available.
+        {!hasSkinRepos && ' The scanner lists no skins with browser tests at this time.'}
+      </p>
 
       <p className="text-xs text-gray-500 text-center">
         Source:{' '}

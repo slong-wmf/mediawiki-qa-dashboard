@@ -40,7 +40,7 @@ const MOCK_TRAIN_BLOCKERS = {
 describe('useDashboardData', () => {
   const MOCK_JOBS = [
     { label: 'Job A', slug: 'job-a', hasTestReport: false },
-    { label: 'selenium-daily-beta-Echo', slug: 'selenium-daily-beta-Echo', hasTestReport: true },
+    { label: 'catalyst-daily-Echo', slug: 'catalyst-daily-Echo', hasTestReport: true },
   ];
 
   beforeEach(() => {

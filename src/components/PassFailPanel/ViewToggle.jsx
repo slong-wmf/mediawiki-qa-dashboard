@@ -22,7 +22,7 @@ export function ViewToggle({ view, onChange, buildCount, buildsWithTestsCount, t
           className={`px-2 py-0.5 transition-colors ${
             view === 'tests' ? 'bg-indigo-700 text-white' : 'bg-transparent text-gray-400 hover:text-gray-200'
           }`}
-          title="Test-level results: aggregated WDIO test case counts from selenium-daily-beta-* jobs"
+          title="Test-level results: aggregated WDIO test case counts from Catalyst catalyst-daily-* jobs"
         >
           Test results
         </button>

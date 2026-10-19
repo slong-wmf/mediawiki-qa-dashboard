@@ -27,8 +27,8 @@ const LIVE_URL = `/api/mw-raw/w/index.php?title=${encodeURIComponent(JSON_PAGE_T
  * @property {string|null} mediawikiVersion
  * @property {string|null} frameworkVersion
  * @property {boolean} gatedSelenium        Whether the repo runs in the gated selenium pipeline
- * @property {boolean} daily                Whether the repo has a daily Jenkins job
- * @property {Array<DailyJob>} dailyJobs    Last-7-day pass/total counts per daily Jenkins job
+ * @property {boolean} daily                Whether the repo has a daily Catalyst job
+ * @property {Array<DailyJob>} dailyJobs    Pass/total counts over the last 7 builds of each daily Catalyst job
  * @property {number}  testCount
  * @property {Array<{ name: string, daily: boolean }>} tests
  */
@@ -37,10 +37,17 @@ const LIVE_URL = `/api/mw-raw/w/index.php?title=${encodeURIComponent(JSON_PAGE_T
  * @typedef {Object} DailyJob
  * @property {string} name
  * @property {string} url
- * @property {number} passes
+ * @property {number} passes  Includes the runs that passed on retry
  * @property {number} fails
+ * @property {number} [flaky] Runs that passed only on retry ('U'). Scanner schema v2.
  * @property {number} total
- * @property {Array<'P'|'F'>} results  Oldest → newest
+ * @property {Array<'P'|'U'|'F'>} results  Oldest → newest
+ */
+
+/**
+ * @typedef {Object} GatedJob
+ * @property {string}      name  Jenkins job that runs the gated selenium tests
+ * @property {string|null} url
  */
 
 /**
@@ -48,6 +55,7 @@ const LIVE_URL = `/api/mw-raw/w/index.php?title=${encodeURIComponent(JSON_PAGE_T
  * @property {string|null} generatedAt     ISO timestamp of the scanner run, when emitted
  * @property {number}      repoCount
  * @property {number}      testCount
+ * @property {GatedJob|null} gatedJob      The gated selenium job, if the scanner sends it
  * @property {Array<AutomatedTestRepo>} repos
  */
 
@@ -134,6 +142,22 @@ function normaliseRepo(raw) {
 }
 
 /**
+ * Normalise the scanner's `gatedJob` field. The scanner adds this field to
+ * tell which Jenkins job runs the gated selenium tests. Missing or bad
+ * values give null.
+ *
+ * @param {unknown} raw
+ * @returns {GatedJob|null}
+ */
+export function normaliseGatedJob(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.name !== 'string' || !raw.name.trim()) return null;
+  return {
+    name: raw.name,
+    url: typeof raw.url === 'string' && raw.url.trim() ? raw.url : null,
+  };
+}
+
+/**
  * Normalise the scanner's top-level JSON envelope into {@link AutomatedTestsData}.
  * Accepts both `{ repos: [...] }` and `{ repos: { repoName: {...} } }` shapes
  * to stay forgiving of future scanner revisions.
@@ -166,6 +190,7 @@ export function normaliseEnvelope(json) {
     generatedAt: typeof envelope.generatedAt === 'string' ? envelope.generatedAt : null,
     repoCount,
     testCount,
+    gatedJob: normaliseGatedJob(envelope.gatedJob),
     repos,
   };
 }

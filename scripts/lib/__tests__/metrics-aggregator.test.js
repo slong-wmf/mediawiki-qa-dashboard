@@ -222,6 +222,21 @@ describe('backfillFromDailyJobs', () => {
     expect(oldest.dailyPassRate.pct).toBe(100);
   });
 
+  it('counts U (passed on retry) flags as passes, as the scanner does', () => {
+    const data = makeAutomatedTests([
+      makeRepo({ dailyJobs: [{ name: 'a', passes: 5, flaky: 3, fails: 2, total: 7, results: ['U','F','U','F','P','U','P'] }] }),
+    ]);
+    const entries = backfillFromDailyJobs(data, { now: FIXED_NOW });
+    // The function skips today. The six past days are U, F, U, F, P, U: 4 passes, 2 fails.
+    expect(entries).toHaveLength(6);
+    expect(entries.find((e) => e.date === '2026-04-23').dailyPassRate.pct).toBe(100);
+    expect(entries.find((e) => e.date === '2026-04-24').dailyPassRate.pct).toBe(0);
+    expect(entries.find((e) => e.date === '2026-04-28').dailyPassRate.pct).toBe(100);
+    const passes = entries.reduce((n, e) => n + e.dailyPassRate.passes, 0);
+    const fails = entries.reduce((n, e) => n + e.dailyPassRate.fails, 0);
+    expect({ passes, fails }).toEqual({ passes: 4, fails: 2 });
+  });
+
   it('returns empty array when no daily jobs', () => {
     expect(backfillFromDailyJobs(null)).toEqual([]);
     expect(backfillFromDailyJobs({ repos: [] })).toEqual([]);

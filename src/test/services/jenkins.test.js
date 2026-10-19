@@ -5,7 +5,26 @@ import {
   fetchRecentBuilds,
   fetchTrackedJobs,
   fetchBuildConsoleTail,
+  DEFAULT_TRACKED_JOBS,
+  DAILY_JOB_PREFIX,
 } from '../../services/jenkins.js';
+
+// ── DEFAULT_TRACKED_JOBS ──────────────────────────────────────────────────────
+
+describe('DEFAULT_TRACKED_JOBS', () => {
+  it('lists the Catalyst daily jobs, not the removed Beta Cluster jobs', () => {
+    const slugs = DEFAULT_TRACKED_JOBS.map((j) => j.slug);
+    expect(DAILY_JOB_PREFIX).toBe('catalyst-daily-');
+    expect(slugs.some((s) => s.startsWith(DAILY_JOB_PREFIX))).toBe(true);
+    expect(slugs.filter((s) => s.startsWith('selenium-daily-beta-'))).toEqual([]);
+  });
+
+  it('only flags catalyst-daily-* jobs as publishing a test report', () => {
+    const withReport = DEFAULT_TRACKED_JOBS.filter((j) => j.hasTestReport);
+    expect(withReport.length).toBeGreaterThan(0);
+    expect(withReport.every((j) => j.slug.startsWith(DAILY_JOB_PREFIX))).toBe(true);
+  });
+});
 
 // ── normaliseStatus ───────────────────────────────────────────────────────────
 
@@ -338,7 +357,7 @@ describe('fetchTrackedJobs', () => {
         // Selenium view
         .mockResolvedValueOnce(mockViewResponse(['quibble-composer-mysql-php81-selenium']))
         // selenium-daily view
-        .mockResolvedValueOnce(mockViewResponse(['selenium-daily-beta-Echo']));
+        .mockResolvedValueOnce(mockViewResponse(['catalyst-daily-Echo']));
 
       const jobs = await fetchTrackedJobs();
       expect(Array.isArray(jobs)).toBe(true);
@@ -358,10 +377,10 @@ describe('fetchTrackedJobs', () => {
       });
     });
 
-    it('sets hasTestReport=true for selenium-daily-beta-* jobs', async () => {
+    it('sets hasTestReport=true for catalyst-daily-* jobs', async () => {
       global.fetch = vi.fn()
         .mockResolvedValueOnce(mockViewResponse([]))
-        .mockResolvedValueOnce(mockViewResponse(['selenium-daily-beta-Echo', 'selenium-daily-beta-Popups']));
+        .mockResolvedValueOnce(mockViewResponse(['catalyst-daily-Echo', 'catalyst-daily-Popups']));
 
       const jobs = await fetchTrackedJobs();
       expect(jobs.every((j) => j.hasTestReport === true)).toBe(true);
@@ -374,6 +393,18 @@ describe('fetchTrackedJobs', () => {
 
       const jobs = await fetchTrackedJobs();
       expect(jobs.every((j) => j.hasTestReport === false)).toBe(true);
+    });
+
+    it('sets hasTestReport=false for daily jobs outside the catalyst-daily-* prefix', async () => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(mockViewResponse([]))
+        // The WikiLambda job runs daily on Catalyst. It publishes no JUnit report.
+        .mockResolvedValueOnce(mockViewResponse(['wikilambda-catalyst-end-to-end-daily']));
+
+      const jobs = await fetchTrackedJobs();
+      expect(jobs).toEqual([
+        { label: 'wikilambda-catalyst-end-to-end-daily', slug: 'wikilambda-catalyst-end-to-end-daily', hasTestReport: false },
+      ]);
     });
 
     it('deduplicates jobs that appear in both views', async () => {

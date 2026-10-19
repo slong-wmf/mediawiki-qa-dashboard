@@ -4,6 +4,7 @@ import { ViewToggle } from './PassFailPanel/ViewToggle.jsx';
 import { PassFailPie } from './PassFailPanel/PassFailPie.jsx';
 import { BuildsTable } from './PassFailPanel/BuildsTable.jsx';
 import FailedJobsDetails from './PassFailPanel/FailedJobsDetails.jsx';
+import { DAILY_JOB_PREFIX } from '../services/jenkins.js';
 
 const MS_7D = 7 * 24 * 60 * 60 * 1000;
 
@@ -32,10 +33,10 @@ function slugFromBuild(b) {
 /**
  * Narrow a list of builds to those owned by one of the selected stewards.
  *
- * Uses the `selenium-daily-beta-<ExtName>` slug convention to map each build
- * to an extension, then looks up the extension's steward in the maintainers
- * map. Builds whose slug does not follow this pattern (e.g. core Quibble jobs)
- * are excluded when a steward filter is active.
+ * The `catalyst-daily-<ExtName>` slug gives the extension of each build. The
+ * maintainers map gives the steward of that extension. When a steward filter
+ * is active, this function removes builds with other slugs (for example, core
+ * Quibble jobs).
  *
  * Exported for unit testing.
  *
@@ -55,8 +56,8 @@ export function filterBuildsBySteward(builds, activeStewards, maintainers) {
   );
   if (!allowedExts.size) return [];
   return builds.filter((b) => {
-    const m = slugFromBuild(b).match(/^selenium-daily-beta-(.+)$/);
-    return !!m && allowedExts.has(m[1]);
+    const slug = slugFromBuild(b);
+    return slug.startsWith(DAILY_JOB_PREFIX) && allowedExts.has(slug.slice(DAILY_JOB_PREFIX.length));
   });
 }
 
@@ -64,14 +65,15 @@ export function filterBuildsBySteward(builds, activeStewards, maintainers) {
  * Pass/Fail Rates panel.
  *
  * Two views, toggled at the top:
- *  • "Test results" — aggregated WDIO test counts from the selenium-daily-beta-*
- *    jobs, which publish a JUnit TestResultAction. (Default view.)
+ *  • "Test results" — aggregated WDIO test counts from the Catalyst
+ *    catalyst-daily-* jobs. Most of these jobs publish a JUnit
+ *    TestResultAction. (Default view.)
  *  • "Job results" — one data point per build (did the whole Jenkins job pass?).
  *
- * When `activeStewards` is non-empty and `maintainers` is provided, the build
- * list is narrowed to `selenium-daily-beta-<ExtName>` jobs whose extension is
- * owned by one of the selected stewards. Core Quibble/Selenium jobs do not map
- * to a single extension and are excluded whenever a steward filter is active.
+ * When `activeStewards` is not empty and `maintainers` is a Map, the panel
+ * shows only the `catalyst-daily-<ExtName>` jobs of the selected stewards.
+ * Core Quibble/Selenium jobs do not map to one extension. The steward filter
+ * removes them.
  *
  * @param {{
  *   builds: Array,
@@ -119,7 +121,7 @@ export default function PassFailPanel({
     ].filter((d) => d.value > 0);
   }, [builds]);
 
-  // Test-level aggregates (selenium-daily-beta-* only).
+  // Test-level aggregates (catalyst-daily-* only).
   const { buildsWithTests, testTotals, testPieData } = useMemo(() => {
     const withTests = builds.filter((b) => b.tests != null);
     const totals    = withTests.reduce(
@@ -182,10 +184,11 @@ export default function PassFailPanel({
         ) : (
           <>
             <span className="text-indigo-300 font-medium">Test-level results</span>
-            {' '}— individual WDIO browser test cases from the{' '}
-            <span className="text-gray-300">selenium-daily-beta-*</span> jobs, which
-            publish a JUnit report. Quibble and Wikibase selenium jobs do not publish
-            test-level reports to Jenkins and are excluded here.
+            {' '}— individual WDIO browser test cases from the Catalyst{' '}
+            <span className="text-gray-300">catalyst-daily-*</span> jobs. The Beta
+            Cluster <span className="text-gray-300">selenium-daily-beta-*</span> jobs
+            are no longer available. Jobs that publish no JUnit report to Jenkins (for
+            example the Quibble selenium jobs) are excluded here.
           </>
         )}
       </p>
